@@ -1,8 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { COOKIE_NAME } from "@/lib/variants";
 
 type Status = "idle" | "loading" | "success" | "error";
+
+function readVariantCookie(): string {
+  if (typeof document === "undefined") return "unknown";
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${COOKIE_NAME}=`));
+  return match ? decodeURIComponent(match.split("=")[1]) : "unknown";
+}
 
 export function WaitlistForm({ variant = "primary" }: { variant?: "primary" | "secondary" }) {
   const [email, setEmail] = useState("");
@@ -18,7 +27,7 @@ export function WaitlistForm({ variant = "primary" }: { variant?: "primary" | "s
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, variant: readVariantCookie() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
