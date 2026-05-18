@@ -1,10 +1,15 @@
+import { cookies } from "next/headers";
 import { WaitlistForm } from "@/components/WaitlistForm";
+import { COOKIE_NAME, pickVariant, type HeroVariant } from "@/lib/variants";
 
-export default function Home() {
+export default async function Home() {
+  const cookieStore = await cookies();
+  const variant = pickVariant(cookieStore.get(COOKIE_NAME)?.value);
+
   return (
     <main className="min-h-screen bg-paper text-ink">
       <Nav />
-      <Hero />
+      <Hero variant={variant} />
       <Problem />
       <Solution />
       <Comparison />
@@ -36,20 +41,17 @@ function Nav() {
   );
 }
 
-function Hero() {
+function Hero({ variant }: { variant: HeroVariant }) {
   return (
     <section id="top" className="container-prose pt-12 pb-24 sm:pt-20 sm:pb-32">
-      <p className="eyebrow mb-6">Launching June 2026 · 47 founding spots left</p>
+      <p className="eyebrow mb-6">{variant.eyebrow}</p>
       <h1 className="font-serif text-5xl leading-[1.05] tracking-tight sm:text-6xl md:text-7xl">
-        Reply with scheduling.
+        {variant.headline}
         <br />
-        <span className="text-ink-muted">Not a Calendly link.</span>
+        <span className="text-ink-muted">{variant.headlineMuted}</span>
       </h1>
       <p className="mt-8 max-w-prose text-lg leading-relaxed text-ink-soft sm:text-xl">
-        Paste the email you got. Replyy drafts three personal-sounding replies —
-        each with real times pulled from your calendar — so you can close{" "}
-        <strong className="text-ink">$50k+ deals</strong> without sounding like a
-        SaaS form.
+        {variant.sub}
       </p>
       <div className="mt-10 max-w-xl">
         <WaitlistForm />
