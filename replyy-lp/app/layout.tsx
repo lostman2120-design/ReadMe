@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://replyy-lp.vercel.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Replyy — Reply with scheduling. Not a Calendly link.",
   description:
     "AI-drafted scheduling emails for $50k+ deals. Paste the email you got. Get three personal-sounding replies with real times from your calendar.",
