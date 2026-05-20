@@ -8,25 +8,25 @@ export type HeroVariant = {
 
 export const HERO_VARIANTS: HeroVariant[] = [
   {
-    id: "calendly-not",
-    eyebrow: "Launching June 2026 · 47 founding spots left",
-    headline: "Reply with scheduling.",
-    headlineMuted: "Not a Calendly link.",
-    sub: "Paste the email you got. Replyy drafts three personal-sounding replies — each with real times pulled from your calendar — so you can close $50k+ deals without sounding like a SaaS form.",
+    id: "vendor-folder",
+    eyebrow: "For the 14 deals you'll close in 2026. Not the 33 you won't.",
+    headline: "You sent the Calendly link.",
+    headlineMuted: "That deal is already lost.",
+    sub: "The moment your prospect saw the link, they moved you to the “vendor” folder. VPs don’t schedule with one-of-forty. The Tuesday morning you wrote by hand — three real times, one line of warmth — that’s how $180K closes. You missed that morning today.",
   },
   {
-    id: "for-people-who",
-    eyebrow: "Launching June 2026 · 47 founding spots left",
-    headline: "The scheduling tool for people",
-    headlineMuted: "who don’t send Calendly links.",
-    sub: "When a link feels too transactional, paste the email instead. Get three personal replies in your voice, with real availability — ready to send.",
+    id: "564-emails",
+    eyebrow: "Built for the 47 scheduling emails a month you’d rather not write.",
+    headline: "564 scheduling emails.",
+    headlineMuted: "That’s what you’ll write this year. By hand.",
+    sub: "Three full workdays gone to six-sentence emails. Three days you’ll never get back. Replyy is how you take them back — starting Tuesday.",
   },
   {
-    id: "fifty-k-deals",
-    eyebrow: "For deals over $25k · Launching June 2026",
-    headline: "AI-drafted scheduling emails",
-    headlineMuted: "for $50k+ deals.",
-    sub: "Stop hand-writing the same scheduling email forty-seven times a month. Replyy drafts three options in your voice, with real times from your calendar, in under five seconds.",
+    id: "hartmann",
+    eyebrow: "For deals that close on a Tuesday morning. Not in a booking form.",
+    headline: "The Hartmann deal arrived at 8:47.",
+    headlineMuted: "You’ll reply at 10:08.",
+    sub: "An hour and twenty-one minutes is how long you take to schedule. Your competitor takes eighteen. Same calendar. Same skills. Different software. The deal closes with whoever sounds human, fast.",
   },
 ];
 
