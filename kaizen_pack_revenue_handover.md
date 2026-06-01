@@ -188,9 +188,9 @@
 
 ## 9. 関連ファイル一覧
 
-- `/home/user/ReadMe/CLAUDE.md` - プロジェクト全体ルール
-- `/home/user/kaizen_pack_templates_v1.md` - 改善パック ひな形 v1
-- `/home/user/numbers_tracker.csv` - 数字管理CSV
+- `/home/user/ReadMe/CLAUDE.md` - プロジェクト全体ルール（※gitignoreされてるため新コンテナには無い場合あり）
+- `/home/user/ReadMe/kaizen_pack_templates_v1.md` - 改善パック ひな形 v1（Gmailテンプレ14個・AIプロンプト5個・ワークフロー3本）
+- `/home/user/numbers_tracker.csv` - 数字管理CSV（※repo外、新コンテナには無い）
 - Notion 公開リンク：
   - Issue #001 構成メモ: https://ablaze-sternum-81d.notion.site/Issue-001-36996072bf6d80f083e4c48f659e9a29
   - note 第2弾 構成メモ: https://ablaze-sternum-81d.notion.site/note-2-36b96072bf6d80fdbc96e1746e452f82
