@@ -8,3 +8,7 @@ assets/
 __pycache__/
 out/demo_v1.mp4
 out/demo_v2.mp4
+out/intro_v.mp4
+out/act*_v.mp4
+out/cta_v.mp4
+out/video_v_noaudio.mp4
