@@ -26,15 +26,15 @@ ACTS=[
    g0=5.0, g1=15.0,
    subs=[(0.3,4.6,"One click on any LinkedIn profile."),
          (4.8,9.8,"AI reads it and scores the lead — instantly.")],
-   spots=[(0.9,4.2,(1572,114,140,54),"Click  Analyze Profile","left",ACCENT),
-          (5.6,9.6,(1556,984,188,60),"Lead Score: 65","left",ACCENT)]),
+   spots=[(0.9,4.2,(1504,160,172,50),"Click  Analyze Profile","left",ACCENT),
+          (5.6,9.6,(1478,915,190,150),"Lead Score: 65","left",ACCENT)]),
 
  dict(name="act2", src=(9.5,22.0), dur=10.0, accent=ACCENT, label="STEP 2   INSIGHTS",
    g0=15.0, g1=25.0,
    subs=[(0.3,4.8,"A Lead Score, pain points & buying signals."),
          (5.0,9.8,"Plus a personalized DM — written for you.")],
-   spots=[(0.6,4.6,(1566,150,348,150),"Pain points & signals","left",ACCENT),
-          (5.2,9.6,(1566,470,348,210),"Ready-to-send DM","left",ACCENT)]),
+   spots=[(0.6,4.6,(1478,748,430,135),"Pain points & signals","left",ACCENT),
+          (5.2,9.6,(1478,398,430,262),"Ready-to-send DM","left",ACCENT)]),
 
  dict(name="act3", src=(22.0,31.3), dur=15.0, accent=ACCENT2, label="STEP 3   ADD TO HUBSPOT",
    g0=25.0, g1=40.0,
@@ -42,14 +42,14 @@ ACTS=[
          (3.8,7.6,"One click:  Add to HubSpot."),
          (7.8,11.0,"No retyping. No copy-paste."),
          (11.2,14.7,"Contact, note & task — all created for you.")],
-   spots=[(0.8,6.2,(1700,864,206,46),"Add to HubSpot","left",ACCENT2)]),
+   spots=[(0.8,6.2,(1578,857,215,55),"Add to HubSpot","left",ACCENT2)]),
 
  dict(name="act4", src=(36.5,55.0), dur=15.0, accent=ACCENT2, label="STEP 4   DONE",
    g0=40.0, g1=55.0, success=(0.25,3.0),
    subs=[(3.3,7.2,"An AI-written summary note, auto-generated."),
          (7.4,11.0,"A follow-up task, so nothing slips."),
          (11.2,14.8,"Your CRM — always up to date.")],
-   spots=[(4.7,9.2,(140,86,1015,150),"AI summary note","bottom",ACCENT2)]),
+   spots=[(4.7,9.2,(300,118,1010,272),"AI summary note","bottom",ACCENT2)]),
 ]
 
 # ---------- overlay drawing helpers ----------
