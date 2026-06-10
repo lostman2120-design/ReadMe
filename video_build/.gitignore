@@ -1,0 +1,7 @@
+# regenerable intermediates
+out/intro.mp4
+out/act*.mp4
+out/cta.mp4
+out/video_noaudio.mp4
+out/soundtrack.wav
+assets/
