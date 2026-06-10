@@ -5,3 +5,6 @@ out/cta.mp4
 out/video_noaudio.mp4
 out/soundtrack.wav
 assets/
+__pycache__/
+out/demo_v1.mp4
+out/demo_v2.mp4
