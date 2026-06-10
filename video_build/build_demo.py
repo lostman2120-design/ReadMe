@@ -26,8 +26,8 @@ ACTS=[
    g0=5.0, g1=15.0,
    subs=[(0.3,4.6,"One click on any LinkedIn profile."),
          (4.8,9.8,"AI reads it and scores the lead — instantly.")],
-   spots=[(0.9,4.2,(1504,160,172,50),"Click  Analyze Profile","left",ACCENT),
-          (5.6,9.6,(1478,915,190,150),"Lead Score: 65","left",ACCENT)]),
+   spots=[(0.9,4.2,(1478,156,202,56),"Click  Analyze Profile","left",ACCENT),
+          (5.6,9.6,(1478,913,192,122),"Lead Score: 65","left",ACCENT)]),
 
  dict(name="act2", src=(9.5,22.0), dur=10.0, accent=ACCENT, label="STEP 2   INSIGHTS",
    g0=15.0, g1=25.0,
@@ -42,7 +42,7 @@ ACTS=[
          (3.8,7.6,"One click:  Add to HubSpot."),
          (7.8,11.0,"No retyping. No copy-paste."),
          (11.2,14.7,"Contact, note & task — all created for you.")],
-   spots=[(0.8,6.2,(1578,857,215,55),"Add to HubSpot","left",ACCENT2)]),
+   spots=[(0.8,6.2,(1680,853,200,58),"Add to HubSpot","left",ACCENT2)]),
 
  dict(name="act4", src=(36.5,55.0), dur=15.0, accent=ACCENT2, label="STEP 4   DONE",
    g0=40.0, g1=55.0, success=(0.25,3.0),
