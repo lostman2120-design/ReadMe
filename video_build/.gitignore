@@ -12,3 +12,8 @@ out/intro_v.mp4
 out/act*_v.mp4
 out/cta_v.mp4
 out/video_v_noaudio.mp4
+
+# StayReply build intermediates
+out_sr/
+fonts/NotoSansJP-*.otf
+*.f32
