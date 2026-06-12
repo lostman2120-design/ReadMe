@@ -17,3 +17,7 @@ out/video_v_noaudio.mp4
 out_sr/
 fonts/NotoSansJP-*.otf
 *.f32
+
+# Alex ICP demo intermediates
+out_hs/
+hs_still/
