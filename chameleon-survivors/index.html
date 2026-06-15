@@ -48,7 +48,8 @@
     <div>
       <span class="pill">移動: WASD / 矢印 / ドラッグ</span>
       <span class="pill">攻撃: 自動</span>
-      <span class="pill">目標: 生存</span>
+      <span class="pill">P: 一時停止</span>
+      <span class="pill">M: 消音</span>
     </div>
     <button id="startBtn">▶ ゲーム開始</button>
     <div class="hint" id="bestHint"></div>
@@ -104,6 +105,38 @@ cv.addEventListener("pointerdown", e => { pointer.active = true; const p = ppos(
 cv.addEventListener("pointermove", e => { if(!pointer.active) return; const p = ppos(e); pointer.x = p.x; pointer.y = p.y; });
 addEventListener("pointerup", () => pointer.active = false);
 
+// ---- audio (WebAudio, no assets) ----
+const Audio = (() => {
+  let actx = null, master = null, muted = false;
+  function ensure() {
+    if (actx) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain(); master.gain.value = 0.35; master.connect(actx.destination);
+  }
+  function blip(freq, dur, type = "square", vol = 1, slide = 0) {
+    if (muted || !actx) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+  }
+  return {
+    resume(){ ensure(); if (actx.state === "suspended") actx.resume(); },
+    toggle(){ muted = !muted; return muted; },
+    isMuted(){ return muted; },
+    tongue(){ blip(620, 0.07, "sawtooth", 0.18, -260); },
+    hit(){ blip(180, 0.05, "square", 0.12, -60); },
+    kill(){ blip(330, 0.09, "triangle", 0.2, 180); },
+    hurt(){ blip(140, 0.22, "sawtooth", 0.3, -90); },
+    levelup(){ blip(523,0.12,"square",0.25); setTimeout(()=>blip(784,0.16,"square",0.25),90); },
+    pick(){ blip(880, 0.1, "triangle", 0.22, 220); },
+  };
+})();
+
 // ============================================================
 //  Game state
 // ============================================================
@@ -111,6 +144,8 @@ let game;
 function newGame() {
   return {
     state: "play",           // play | levelup | over
+    paused: false,
+    hitstop: 0,              // brief time-freeze on big hits
     time: 0,                 // seconds survived
     cam: { x:0, y:0 },
     player: {
@@ -196,6 +231,7 @@ function spawnEnemy() {
     r:base.r, hp:base.hp*hpScale, maxhp:base.hp*hpScale,
     speed:base.speed*(1 + t/400), dmg:base.dmg, xp:base.xp,
     color:base.color, wob:base.wob, hit:0, phase:Math.random()*TAU,
+    kx:0, ky:0,
   });
 }
 
@@ -204,14 +240,19 @@ function spawnEnemy() {
 // ============================================================
 function damageEnemy(e, dmg, kx, ky) {
   e.hp -= dmg; e.hit = 0.12;
+  // knockback scaled down for bigger enemies
+  const kf = 0.55 * (18 / e.r);
+  e.kx += kx * kf; e.ky += ky * kf;
   game.dmgText.push({ x:e.x, y:e.y - e.r, t:0.6, v:Math.round(dmg), crit:dmg>game.player.tongueDmg });
   for (let i = 0; i < 4; i++)
     game.particles.push({ x:e.x, y:e.y, vx:rand(-60,60)+kx*0.3, vy:rand(-60,60)+ky*0.3,
       t:rand(.2,.45), c:e.color, r:rand(1,3) });
+  Audio.hit();
   if (e.hp <= 0) killEnemy(e);
 }
 function killEnemy(e) {
   e.dead = true; game.kills++;
+  Audio.kill();
   game.gems.push({ x:e.x, y:e.y, xp:e.xp, r:5 + Math.min(e.xp,6), vx:rand(-30,30), vy:rand(-30,30) });
   for (let i = 0; i < 8; i++)
     game.particles.push({ x:e.x, y:e.y, vx:rand(-120,120), vy:rand(-120,120),
@@ -228,6 +269,7 @@ function fireTongue() {
     if (d2 <= R2) inRange.push({ e, d2 });
   }
   if (!inRange.length) return;
+  Audio.tongue();
   inRange.sort((a, b) => a.d2 - b.d2);
   const n = Math.min(p.tongues, inRange.length);
   for (let i = 0; i < n; i++) {
@@ -246,6 +288,7 @@ function fireTongue() {
     }
     p.tongueAnim.push({ ang, len, t:0.18, max:0.18 });
     game.shake = Math.min(game.shake + 2, 8);
+    if (crit) game.hitstop = Math.max(game.hitstop, 0.05);
   }
 }
 function pointSegDist2(px, py, ax, ay, bx, by) {
@@ -263,6 +306,7 @@ function gainXP(n) {
     game.xp -= game.xpNext;
     game.level++;
     game.xpNext = Math.round(game.xpNext * 1.32 + 3);
+    Audio.levelup();
     openLevelUp();
   }
 }
@@ -306,9 +350,9 @@ function update(dt) {
 
   // ---- spawn ----
   game.spawnTimer -= dt;
-  const spawnInterval = Math.max(0.18, 1.1 - game.time/220);
+  const spawnInterval = Math.max(0.16, 0.8 - game.time/220);
   if (game.spawnTimer <= 0) {
-    const batch = 1 + Math.floor(game.time / 35);
+    const batch = 1 + Math.floor(game.time / 30);
     for (let i = 0; i < batch; i++) spawnEnemy();
     game.spawnTimer = spawnInterval;
   }
@@ -321,11 +365,14 @@ function update(dt) {
     if (e.wob) ang += Math.sin(e.phase) * 0.5;
     e.x += Math.cos(ang) * e.speed * dt;
     e.y += Math.sin(ang) * e.speed * dt;
+    // knockback decay
+    e.x += e.kx * dt; e.y += e.ky * dt;
+    e.kx *= 0.82; e.ky *= 0.82;
     if (e.hit > 0) e.hit -= dt;
     // collide with player
     const rr = (e.r + p.r);
     if (dist2(e.x, e.y, p.x, p.y) < rr*rr && p.iframe <= 0) {
-      p.hp -= e.dmg; p.iframe = 0.6; game.shake = 10;
+      p.hp -= e.dmg; p.iframe = 0.6; game.shake = 10; Audio.hurt();
       for (let i = 0; i < 10; i++)
         game.particles.push({ x:p.x, y:p.y, vx:rand(-150,150), vy:rand(-150,150), t:rand(.2,.5), c:"#ff7b7b", r:rand(1,3) });
       if (p.hp <= 0) { gameOver(); return; }
@@ -358,7 +405,7 @@ function update(dt) {
       const pull = p.magnet ? 420 : 260;
       g.x += Math.cos(ang)*pull*dt; g.y += Math.sin(ang)*pull*dt;
     }
-    if (d2 < (p.r + g.r)**2) { g.got = true; gainXP(g.xp); }
+    if (d2 < (p.r + g.r)**2) { g.got = true; Audio.pick(); gainXP(g.xp); }
   }
   game.gems = game.gems.filter(g => !g.got);
 
@@ -428,7 +475,26 @@ function render() {
   ctx.globalAlpha = 1;
 
   ctx.restore();
+
+  // low-HP red vignette warning
+  const hpr = p.hp / p.maxhp;
+  if (hpr < 0.35) {
+    const pulse = 0.25 + 0.15 * Math.sin(game.time * 6);
+    const g = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.3, W/2, H/2, Math.max(W,H)*0.6);
+    g.addColorStop(0, "rgba(255,0,40,0)");
+    g.addColorStop(1, `rgba(255,0,40,${pulse * (1 - hpr/0.35)})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+
   drawHUD();
+
+  if (game.paused) {
+    ctx.fillStyle = "rgba(8,18,12,.6)"; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#7CFC9B"; ctx.textAlign = "center"; ctx.font = "bold 40px sans-serif";
+    ctx.fillText("PAUSED", W/2, H/2);
+    ctx.font = "14px sans-serif"; ctx.fillStyle = "#eafff0";
+    ctx.fillText("P で再開", W/2, H/2 + 32);
+  }
 }
 
 function drawGrid(camx, camy) {
@@ -515,6 +581,7 @@ function show(id){ el(id).classList.remove("hidden"); }
 function hide(id){ el(id).classList.add("hidden"); }
 
 function start() {
+  Audio.resume();               // unlock WebAudio on user gesture
   game = newGame();
   hide("title"); hide("gameover"); hide("levelup");
   game.state = "play";
@@ -570,11 +637,24 @@ let last = performance.now();
 function loop(now) {
   let dt = (now - last) / 1000; last = now;
   dt = Math.min(dt, 1/20); // clamp big frame gaps
-  if (game && game.state === "play") update(dt);
+  if (game && game.state === "play" && !game.paused) {
+    if (game.hitstop > 0) game.hitstop -= dt;   // freeze sim, keep rendering
+    else update(dt);
+  }
   if (game) render();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// pause / mute
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (game && game.state === "play" && (k === "p" || k === "escape")) game.paused = !game.paused;
+  if (k === "m") Audio.toggle();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && game && game.state === "play") game.paused = true;
+});
 </script>
 </body>
 </html>
