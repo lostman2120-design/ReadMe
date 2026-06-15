@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Chameleon Survivors</title>
+<style>
+  :root { --bg:#0d1b14; --accent:#7CFC9B; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; background:var(--bg); overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Sans",sans-serif;
+    color:#eafff0; -webkit-tap-highlight-color:transparent; user-select:none; }
+  #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  canvas { background:#102a1c; touch-action:none; image-rendering:pixelated; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:18px; text-align:center; padding:24px;
+    background:rgba(8,18,12,.82); backdrop-filter:blur(3px); }
+  .hidden { display:none !important; }
+  h1 { font-size:clamp(28px,7vw,56px); letter-spacing:2px; color:var(--accent);
+    text-shadow:0 0 18px rgba(124,252,155,.5); }
+  .sub { opacity:.8; max-width:520px; line-height:1.6; font-size:15px; }
+  button { font:inherit; font-size:18px; font-weight:700; cursor:pointer; border:none;
+    padding:14px 30px; border-radius:14px; background:var(--accent); color:#06120b;
+    box-shadow:0 6px 0 #3fa05f, 0 10px 24px rgba(0,0,0,.4); transition:transform .06s; }
+  button:active { transform:translateY(3px); box-shadow:0 3px 0 #3fa05f; }
+  .cards { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; max-width:760px; }
+  .card { width:200px; background:#16341f; border:2px solid #2c6b3f; border-radius:16px;
+    padding:18px; cursor:pointer; transition:transform .08s, border-color .08s; text-align:left; }
+  .card:hover, .card.sel { transform:translateY(-4px); border-color:var(--accent); }
+  .card .ico { font-size:34px; }
+  .card .name { font-weight:800; margin:6px 0 4px; color:var(--accent); }
+  .card .desc { font-size:13px; opacity:.82; line-height:1.45; }
+  .card .lvl { font-size:11px; opacity:.6; margin-top:8px; }
+  .stat { font-size:13px; opacity:.85; }
+  .pill { display:inline-block; background:#16341f; border:1px solid #2c6b3f;
+    padding:4px 10px; border-radius:999px; font-size:12px; margin:2px; }
+  .hint { font-size:12px; opacity:.55; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <div id="title" class="overlay">
+    <h1>🦎 CHAMELEON<br>SURVIVORS</h1>
+    <div class="sub">迫りくる虫の群れを、伸びる舌で食べ尽くせ。<br>
+      生き延びてレベルアップ、自分だけのビルドを完成させろ。</div>
+    <div>
+      <span class="pill">移動: WASD / 矢印 / ドラッグ</span>
+      <span class="pill">攻撃: 自動</span>
+      <span class="pill">目標: 生存</span>
+    </div>
+    <button id="startBtn">▶ ゲーム開始</button>
+    <div class="hint" id="bestHint"></div>
+  </div>
+
+  <div id="levelup" class="overlay hidden">
+    <h1 style="font-size:clamp(22px,5vw,38px)">LEVEL UP!</h1>
+    <div class="sub">強化を1つ選べ</div>
+    <div class="cards" id="choiceCards"></div>
+  </div>
+
+  <div id="gameover" class="overlay hidden">
+    <h1 style="color:#ff7b7b">GAME OVER</h1>
+    <div class="sub" id="goStats"></div>
+    <button id="retryBtn">↻ もう一度</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   Chameleon Survivors — single-file HTML5 prototype
+   ヴァンサバ系: 自動攻撃 / 群れ / XP / レベルアップ強化
+   ============================================================ */
+const cv = document.getElementById("game");
+const ctx = cv.getContext("2d");
+
+// ---- viewport ----
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ---- helpers ----
+const rand = (a, b) => a + Math.random() * (b - a);
+const dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx*dx + dy*dy; };
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const TAU = Math.PI * 2;
+
+// ---- input ----
+const keys = {};
+addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; });
+addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+let pointer = { active:false, x:0, y:0 };
+function ppos(e){ const t = e.touches ? e.touches[0] : e; return { x:t.clientX, y:t.clientY }; }
+cv.addEventListener("pointerdown", e => { pointer.active = true; const p = ppos(e); pointer.x = p.x; pointer.y = p.y; });
+cv.addEventListener("pointermove", e => { if(!pointer.active) return; const p = ppos(e); pointer.x = p.x; pointer.y = p.y; });
+addEventListener("pointerup", () => pointer.active = false);
+
+// ============================================================
+//  Game state
+// ============================================================
+let game;
+function newGame() {
+  return {
+    state: "play",           // play | levelup | over
+    time: 0,                 // seconds survived
+    cam: { x:0, y:0 },
+    player: {
+      x:0, y:0, r:18, speed:185, hp:100, maxhp:100,
+      facing:{x:1,y:0},
+      iframe:0,
+      // weapon: tongue
+      tongueCd:0, tongueRate:0.85, tongueRange:230, tongueDmg:14, tongueWidth:14,
+      tongues:1,            // number of simultaneous tongue strikes
+      pickupRange:90,
+      magnet:false,
+      regen:0,
+      // anim
+      tongueAnim:[],        // active tongue strikes for drawing
+    },
+    enemies: [],
+    gems: [],
+    particles: [],
+    dmgText: [],
+    level: 1, xp:0, xpNext: 5,
+    kills: 0,
+    spawnTimer: 0,
+    shake: 0,
+    choices: [],
+  };
+}
+
+// ---- upgrade pool ----
+const UPGRADES = [
+  { id:"rate",  ico:"⚡", name:"舌の速さ", desc:"攻撃間隔 -15%",
+    apply:p => p.tongueRate *= 0.85 },
+  { id:"dmg",   ico:"🔥", name:"鋭い舌", desc:"ダメージ +30%",
+    apply:p => p.tongueDmg *= 1.3 },
+  { id:"range", ico:"📏", name:"伸びる舌", desc:"射程 +25%",
+    apply:p => p.tongueRange *= 1.25 },
+  { id:"multi", ico:"👅", name:"二枚舌", desc:"同時攻撃 +1",
+    apply:p => p.tongues += 1 },
+  { id:"width", ico:"💢", name:"極太の舌", desc:"舌が太くなり貫通力UP",
+    apply:p => p.tongueWidth *= 1.5 },
+  { id:"speed", ico:"🏃", name:"俊足", desc:"移動速度 +15%",
+    apply:p => p.speed *= 1.15 },
+  { id:"hp",    ico:"❤️", name:"頑丈", desc:"最大HP +30 & 全回復",
+    apply:p => { p.maxhp += 30; p.hp = p.maxhp; } },
+  { id:"regen", ico:"🌿", name:"再生", desc:"毎秒HP回復 +1.5",
+    apply:p => p.regen += 1.5 },
+  { id:"magnet",ico:"🧲", name:"舌の吸引", desc:"経験値を引き寄せる",
+    apply:p => { p.magnet = true; p.pickupRange += 120; } },
+];
+
+function rollChoices() {
+  const pool = UPGRADES.slice();
+  const out = [];
+  while (out.length < 3 && pool.length) {
+    out.push(pool.splice((Math.random()*pool.length)|0, 1)[0]);
+  }
+  return out;
+}
+
+// ============================================================
+//  Spawning
+// ============================================================
+const ENEMY_TYPES = {
+  fly:    { r:12, hp:10,  speed:70,  dmg:6,  xp:1, color:"#9be36b", wob:true },
+  beetle: { r:17, hp:34,  speed:52,  dmg:12, xp:3, color:"#c98b3a", wob:false },
+  wasp:   { r:11, hp:16,  speed:120, dmg:9,  xp:2, color:"#f2d04b", wob:true },
+  tank:   { r:26, hp:120, speed:38,  dmg:20, xp:8, color:"#b15de0", wob:false },
+};
+function spawnEnemy() {
+  const p = game.player;
+  const ang = Math.random() * TAU;
+  const d = Math.max(W, H) * 0.62 + 80;
+  // difficulty scaling by time
+  const t = game.time;
+  let type = "fly";
+  const r = Math.random();
+  if (t > 240 && r < 0.16) type = "tank";
+  else if (t > 90 && r < 0.32) type = "beetle";
+  else if (t > 40 && r < 0.5) type = "wasp";
+  const base = ENEMY_TYPES[type];
+  const hpScale = 1 + t / 95;
+  game.enemies.push({
+    type, x:p.x + Math.cos(ang)*d, y:p.y + Math.sin(ang)*d,
+    r:base.r, hp:base.hp*hpScale, maxhp:base.hp*hpScale,
+    speed:base.speed*(1 + t/400), dmg:base.dmg, xp:base.xp,
+    color:base.color, wob:base.wob, hit:0, phase:Math.random()*TAU,
+  });
+}
+
+// ============================================================
+//  Update
+// ============================================================
+function damageEnemy(e, dmg, kx, ky) {
+  e.hp -= dmg; e.hit = 0.12;
+  game.dmgText.push({ x:e.x, y:e.y - e.r, t:0.6, v:Math.round(dmg), crit:dmg>game.player.tongueDmg });
+  for (let i = 0; i < 4; i++)
+    game.particles.push({ x:e.x, y:e.y, vx:rand(-60,60)+kx*0.3, vy:rand(-60,60)+ky*0.3,
+      t:rand(.2,.45), c:e.color, r:rand(1,3) });
+  if (e.hp <= 0) killEnemy(e);
+}
+function killEnemy(e) {
+  e.dead = true; game.kills++;
+  game.gems.push({ x:e.x, y:e.y, xp:e.xp, r:5 + Math.min(e.xp,6), vx:rand(-30,30), vy:rand(-30,30) });
+  for (let i = 0; i < 8; i++)
+    game.particles.push({ x:e.x, y:e.y, vx:rand(-120,120), vy:rand(-120,120),
+      t:rand(.25,.6), c:e.color, r:rand(1.5,3.5) });
+}
+
+function fireTongue() {
+  const p = game.player;
+  // target the nearest N enemies in range
+  const inRange = [];
+  const R2 = p.tongueRange * p.tongueRange;
+  for (const e of game.enemies) {
+    const d2 = dist2(p.x, p.y, e.x, e.y);
+    if (d2 <= R2) inRange.push({ e, d2 });
+  }
+  if (!inRange.length) return;
+  inRange.sort((a, b) => a.d2 - b.d2);
+  const n = Math.min(p.tongues, inRange.length);
+  for (let i = 0; i < n; i++) {
+    const tgt = inRange[i].e;
+    const ang = Math.atan2(tgt.y - p.y, tgt.x - p.x);
+    const len = Math.min(p.tongueRange, Math.sqrt(inRange[i].d2) + tgt.r);
+    // hit everything along the tongue line (piercing)
+    const ex = p.x + Math.cos(ang)*len, ey = p.y + Math.sin(ang)*len;
+    const crit = Math.random() < 0.15;
+    const dmg = p.tongueDmg * (crit ? 2 : 1);
+    for (const e of game.enemies) {
+      if (e.dead) continue;
+      if (pointSegDist2(e.x, e.y, p.x, p.y, ex, ey) <= (p.tongueWidth + e.r) ** 2) {
+        damageEnemy(e, dmg, Math.cos(ang)*200, Math.sin(ang)*200);
+      }
+    }
+    p.tongueAnim.push({ ang, len, t:0.18, max:0.18 });
+    game.shake = Math.min(game.shake + 2, 8);
+  }
+}
+function pointSegDist2(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx*dx + dy*dy || 1;
+  let t = ((px - ax)*dx + (py - ay)*dy) / l2;
+  t = clamp(t, 0, 1);
+  const cx = ax + t*dx, cy = ay + t*dy;
+  return dist2(px, py, cx, cy);
+}
+
+function gainXP(n) {
+  game.xp += n;
+  while (game.xp >= game.xpNext) {
+    game.xp -= game.xpNext;
+    game.level++;
+    game.xpNext = Math.round(game.xpNext * 1.32 + 3);
+    openLevelUp();
+  }
+}
+
+function update(dt) {
+  const p = game.player;
+  game.time += dt;
+
+  // ---- movement ----
+  let mx = 0, my = 0;
+  if (keys["a"] || keys["arrowleft"]) mx -= 1;
+  if (keys["d"] || keys["arrowright"]) mx += 1;
+  if (keys["w"] || keys["arrowup"]) my -= 1;
+  if (keys["s"] || keys["arrowdown"]) my += 1;
+  if (pointer.active) {
+    const wx = pointer.x - W/2, wy = pointer.y - H/2;
+    if (Math.hypot(wx, wy) > 18) { mx = wx; my = wy; }
+  }
+  const ml = Math.hypot(mx, my);
+  if (ml > 0) {
+    mx /= ml; my /= ml;
+    p.x += mx * p.speed * dt; p.y += my * p.speed * dt;
+    p.facing.x = mx; p.facing.y = my;
+  }
+
+  // ---- camera ----
+  game.cam.x += (p.x - game.cam.x) * Math.min(1, dt*8);
+  game.cam.y += (p.y - game.cam.y) * Math.min(1, dt*8);
+
+  // ---- regen ----
+  if (p.regen) p.hp = Math.min(p.maxhp, p.hp + p.regen * dt);
+  if (p.iframe > 0) p.iframe -= dt;
+
+  // ---- weapon ----
+  p.tongueCd -= dt;
+  if (p.tongueCd <= 0) { fireTongue(); p.tongueCd = p.tongueRate; }
+  for (let i = p.tongueAnim.length - 1; i >= 0; i--) {
+    p.tongueAnim[i].t -= dt;
+    if (p.tongueAnim[i].t <= 0) p.tongueAnim.splice(i, 1);
+  }
+
+  // ---- spawn ----
+  game.spawnTimer -= dt;
+  const spawnInterval = Math.max(0.18, 1.1 - game.time/220);
+  if (game.spawnTimer <= 0) {
+    const batch = 1 + Math.floor(game.time / 35);
+    for (let i = 0; i < batch; i++) spawnEnemy();
+    game.spawnTimer = spawnInterval;
+  }
+
+  // ---- enemies ----
+  for (const e of game.enemies) {
+    if (e.dead) continue;
+    let ang = Math.atan2(p.y - e.y, p.x - e.x);
+    e.phase += dt * 4;
+    if (e.wob) ang += Math.sin(e.phase) * 0.5;
+    e.x += Math.cos(ang) * e.speed * dt;
+    e.y += Math.sin(ang) * e.speed * dt;
+    if (e.hit > 0) e.hit -= dt;
+    // collide with player
+    const rr = (e.r + p.r);
+    if (dist2(e.x, e.y, p.x, p.y) < rr*rr && p.iframe <= 0) {
+      p.hp -= e.dmg; p.iframe = 0.6; game.shake = 10;
+      for (let i = 0; i < 10; i++)
+        game.particles.push({ x:p.x, y:p.y, vx:rand(-150,150), vy:rand(-150,150), t:rand(.2,.5), c:"#ff7b7b", r:rand(1,3) });
+      if (p.hp <= 0) { gameOver(); return; }
+    }
+  }
+  // separation so enemies don't fully stack
+  for (let i = 0; i < game.enemies.length; i++) {
+    const a = game.enemies[i]; if (a.dead) continue;
+    for (let j = i+1; j < game.enemies.length; j++) {
+      const b = game.enemies[j]; if (b.dead) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const rr = a.r + b.r;
+      const d2 = dx*dx + dy*dy;
+      if (d2 < rr*rr && d2 > 0.01) {
+        const d = Math.sqrt(d2); const push = (rr - d) * 0.5;
+        const nx = dx/d, ny = dy/d;
+        a.x -= nx*push; a.y -= ny*push; b.x += nx*push; b.y += ny*push;
+      }
+    }
+  }
+  game.enemies = game.enemies.filter(e => !e.dead);
+
+  // ---- gems ----
+  for (const g of game.gems) {
+    g.x += g.vx * dt; g.y += g.vy * dt; g.vx *= 0.9; g.vy *= 0.9;
+    const d2 = dist2(g.x, g.y, p.x, p.y);
+    const pr = p.pickupRange;
+    if (p.magnet || d2 < pr*pr) {
+      const ang = Math.atan2(p.y - g.y, p.x - g.x);
+      const pull = p.magnet ? 420 : 260;
+      g.x += Math.cos(ang)*pull*dt; g.y += Math.sin(ang)*pull*dt;
+    }
+    if (d2 < (p.r + g.r)**2) { g.got = true; gainXP(g.xp); }
+  }
+  game.gems = game.gems.filter(g => !g.got);
+
+  // ---- particles / dmg text ----
+  for (const pt of game.particles) { pt.x += pt.vx*dt; pt.y += pt.vy*dt; pt.vx*=0.92; pt.vy*=0.92; pt.t -= dt; }
+  game.particles = game.particles.filter(pt => pt.t > 0);
+  for (const d of game.dmgText) { d.t -= dt; d.y -= 26*dt; }
+  game.dmgText = game.dmgText.filter(d => d.t > 0);
+
+  if (game.shake > 0) game.shake = Math.max(0, game.shake - dt*30);
+}
+
+// ============================================================
+//  Render
+// ============================================================
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  const sx = game.shake ? rand(-game.shake, game.shake) : 0;
+  const sy = game.shake ? rand(-game.shake, game.shake) : 0;
+  const camx = game.cam.x - W/2 + sx;
+  const camy = game.cam.y - H/2 + sy;
+  ctx.save();
+  ctx.translate(-camx, -camy);
+
+  drawGrid(camx, camy);
+
+  // gems
+  for (const g of game.gems) {
+    ctx.beginPath(); ctx.arc(g.x, g.y, g.r, 0, TAU);
+    ctx.fillStyle = "#39d6ff"; ctx.shadowColor = "#39d6ff"; ctx.shadowBlur = 10;
+    ctx.fill(); ctx.shadowBlur = 0;
+  }
+
+  // enemies
+  for (const e of game.enemies) drawEnemy(e);
+
+  // particles
+  for (const pt of game.particles) {
+    ctx.globalAlpha = clamp(pt.t*2, 0, 1);
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, TAU);
+    ctx.fillStyle = pt.c; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // tongues
+  const p = game.player;
+  for (const t of p.tongueAnim) {
+    const prog = 1 - (t.t / t.max);
+    const reach = t.len * Math.sin(prog * Math.PI); // out then back
+    const ex = p.x + Math.cos(t.ang)*reach, ey = p.y + Math.sin(t.ang)*reach;
+    ctx.strokeStyle = "#ff5d7e"; ctx.lineCap = "round";
+    ctx.lineWidth = p.tongueWidth*1.4;
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.beginPath(); ctx.arc(ex, ey, p.tongueWidth*0.9, 0, TAU);
+    ctx.fillStyle = "#ff7b95"; ctx.fill();
+  }
+
+  drawPlayer();
+
+  // damage text
+  ctx.textAlign = "center"; ctx.font = "bold 15px sans-serif";
+  for (const d of game.dmgText) {
+    ctx.globalAlpha = clamp(d.t*2, 0, 1);
+    ctx.fillStyle = d.crit ? "#ffd24b" : "#ffffff";
+    ctx.fillText(d.v, d.x, d.y);
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+  drawHUD();
+}
+
+function drawGrid(camx, camy) {
+  const s = 64;
+  ctx.strokeStyle = "rgba(124,252,155,0.06)"; ctx.lineWidth = 1;
+  const x0 = Math.floor(camx / s) * s, y0 = Math.floor(camy / s) * s;
+  ctx.beginPath();
+  for (let x = x0; x < camx + W + s; x += s) { ctx.moveTo(x, camy); ctx.lineTo(x, camy + H); }
+  for (let y = y0; y < camy + H + s; y += s) { ctx.moveTo(camx, y); ctx.lineTo(camx + W, y); }
+  ctx.stroke();
+}
+
+function drawEnemy(e) {
+  ctx.save(); ctx.translate(e.x, e.y);
+  const bob = e.wob ? Math.sin(e.phase)*2 : 0;
+  ctx.translate(0, bob);
+  ctx.beginPath(); ctx.arc(0, 0, e.r, 0, TAU);
+  ctx.fillStyle = e.hit > 0 ? "#ffffff" : e.color; ctx.fill();
+  // eyes
+  ctx.fillStyle = "#06120b";
+  ctx.beginPath(); ctx.arc(-e.r*0.3, -e.r*0.2, e.r*0.16, 0, TAU);
+  ctx.arc(e.r*0.3, -e.r*0.2, e.r*0.16, 0, TAU); ctx.fill();
+  ctx.restore();
+  // hp bar
+  if (e.hp < e.maxhp) {
+    const w = e.r*2;
+    ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(e.x - w/2, e.y - e.r - 9, w, 4);
+    ctx.fillStyle = "#7CFC9B"; ctx.fillRect(e.x - w/2, e.y - e.r - 9, w * clamp(e.hp/e.maxhp,0,1), 4);
+  }
+}
+
+function drawPlayer() {
+  const p = game.player;
+  ctx.save(); ctx.translate(p.x, p.y);
+  if (p.iframe > 0 && Math.floor(p.iframe*20) % 2) ctx.globalAlpha = 0.4;
+  const a = Math.atan2(p.facing.y, p.facing.x);
+  ctx.rotate(a);
+  // body
+  ctx.beginPath(); ctx.ellipse(0, 0, p.r*1.2, p.r, 0, 0, TAU);
+  ctx.fillStyle = "#5fd17a"; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = "#2c6b3f"; ctx.stroke();
+  // back ridge
+  ctx.beginPath();
+  for (let i = -1; i <= 1; i++) { ctx.moveTo(i*7-3, -p.r*0.8); ctx.lineTo(i*7, -p.r*1.15); ctx.lineTo(i*7+3, -p.r*0.8); }
+  ctx.strokeStyle = "#3fa05f"; ctx.lineWidth = 2; ctx.stroke();
+  // eye (turret-like)
+  ctx.beginPath(); ctx.arc(p.r*0.7, -p.r*0.35, p.r*0.42, 0, TAU);
+  ctx.fillStyle = "#eafff0"; ctx.fill();
+  ctx.beginPath(); ctx.arc(p.r*0.8, -p.r*0.35, p.r*0.18, 0, TAU);
+  ctx.fillStyle = "#06120b"; ctx.fill();
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  const p = game.player;
+  // xp bar (top)
+  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(0, 0, W, 10);
+  ctx.fillStyle = "#39d6ff"; ctx.fillRect(0, 0, W * clamp(game.xp/game.xpNext,0,1), 10);
+  // hp bar
+  const hw = 200;
+  ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(14, 22, hw, 16);
+  ctx.fillStyle = "#ff5d7e"; ctx.fillRect(14, 22, hw * clamp(p.hp/p.maxhp,0,1), 16);
+  ctx.strokeStyle = "rgba(255,255,255,.3)"; ctx.lineWidth = 1; ctx.strokeRect(14, 22, hw, 16);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "left";
+  ctx.fillText(`HP ${Math.ceil(p.hp)}/${p.maxhp}`, 20, 34);
+  // level
+  ctx.font = "bold 14px sans-serif";
+  ctx.fillText(`Lv.${game.level}`, 14, 58);
+  // timer (center)
+  const m = Math.floor(game.time/60), s = Math.floor(game.time%60);
+  ctx.textAlign = "center"; ctx.font = "bold 26px sans-serif"; ctx.fillStyle = "#eafff0";
+  ctx.fillText(`${m}:${s.toString().padStart(2,"0")}`, W/2, 40);
+  // kills (right)
+  ctx.textAlign = "right"; ctx.font = "bold 14px sans-serif";
+  ctx.fillText(`☠ ${game.kills}`, W - 14, 40);
+}
+
+// ============================================================
+//  Flow / UI
+// ============================================================
+const el = id => document.getElementById(id);
+function show(id){ el(id).classList.remove("hidden"); }
+function hide(id){ el(id).classList.add("hidden"); }
+
+function start() {
+  game = newGame();
+  hide("title"); hide("gameover"); hide("levelup");
+  game.state = "play";
+}
+function gameOver() {
+  game.state = "over";
+  const best = Math.max(Number(localStorage.getItem("cs_best")||0), Math.floor(game.time));
+  localStorage.setItem("cs_best", best);
+  const m = Math.floor(game.time/60), s = Math.floor(game.time%60);
+  el("goStats").innerHTML =
+    `生存 <b>${m}:${s.toString().padStart(2,"0")}</b> ／ 撃破 <b>${game.kills}</b> ／ Lv.<b>${game.level}</b><br>` +
+    `<span class="pill">自己ベスト: ${Math.floor(best/60)}:${(best%60).toString().padStart(2,"0")}</span>`;
+  show("gameover");
+}
+function openLevelUp() {
+  game.state = "levelup";
+  game.choices = rollChoices();
+  const box = el("choiceCards"); box.innerHTML = "";
+  game.choices.forEach((u, i) => {
+    const c = document.createElement("div");
+    c.className = "card";
+    c.innerHTML = `<div class="ico">${u.ico}</div><div class="name">${u.name}</div>`+
+                  `<div class="desc">${u.desc}</div>`;
+    c.onclick = () => pickUpgrade(i);
+    box.appendChild(c);
+  });
+  show("levelup");
+}
+function pickUpgrade(i) {
+  game.choices[i].apply(game.player);
+  hide("levelup");
+  game.state = "play";
+}
+
+el("startBtn").onclick = start;
+el("retryBtn").onclick = start;
+const best = Number(localStorage.getItem("cs_best")||0);
+if (best > 0) el("bestHint").textContent =
+  `自己ベスト: ${Math.floor(best/60)}:${(best%60).toString().padStart(2,"0")}`;
+
+// keyboard: number keys to pick upgrade
+addEventListener("keydown", e => {
+  if (game && game.state === "levelup") {
+    const n = parseInt(e.key);
+    if (n >= 1 && n <= game.choices.length) pickUpgrade(n-1);
+  }
+});
+
+// ============================================================
+//  Loop
+// ============================================================
+let last = performance.now();
+function loop(now) {
+  let dt = (now - last) / 1000; last = now;
+  dt = Math.min(dt, 1/20); // clamp big frame gaps
+  if (game && game.state === "play") update(dt);
+  if (game) render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
