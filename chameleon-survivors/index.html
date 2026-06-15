@@ -173,6 +173,8 @@ const Audio = (() => {
     chest(){ const seq = [523, 659, 784, 1047, 1319];
       seq.forEach((f, i) => setTimeout(() => { blip(f, 0.16, "triangle", 0.24); blip(f*1.5, 0.08, "square", 0.06); }, i*75)); },
     shield(){ blip(330,0.08,"square",0.2,400); blip(660,0.12,"triangle",0.12,-200); },
+    heal(){ const seq = [523, 784, 1047];
+      seq.forEach((f, i) => setTimeout(() => blip(f, 0.18, "sine", 0.2), i*100)); },
     boom(){ blip(90,0.4,"sawtooth",0.35,-50); blip(200,0.3,"square",0.2,-160); },
   };
 })();
@@ -261,22 +263,29 @@ function rollChoices() {
 //  Spawning
 // ============================================================
 const ENEMY_TYPES = {
-  fly:    { r:12, hp:10,  speed:70,  dmg:6,  xp:1, color:"#9be36b", wob:true },
-  beetle: { r:17, hp:34,  speed:52,  dmg:12, xp:3, color:"#c98b3a", wob:false },
-  wasp:   { r:11, hp:16,  speed:120, dmg:9,  xp:2, color:"#f2d04b", wob:true },
-  tank:   { r:26, hp:120, speed:38,  dmg:20, xp:8, color:"#b15de0", wob:false },
+  fly:       { r:12, hp:10,  speed:74,  dmg:6,  xp:1, color:"#9be36b", wob:true,  shape:"fly"       },
+  butterfly: { r:13, hp:14,  speed:66,  dmg:7,  xp:2, color:"#e58ad6", wob:true,  shape:"butterfly" },
+  bat:       { r:12, hp:18,  speed:128, dmg:9,  xp:2, color:"#8a7caa", wob:true,  shape:"bat"       },
+  wasp:      { r:11, hp:18,  speed:120, dmg:9,  xp:2, color:"#f2d04b", wob:true,  shape:"wasp"      },
+  beetle:    { r:16, hp:38,  speed:54,  dmg:12, xp:3, color:"#c98b3a", wob:false, shape:"beetle"    },
+  zombie:    { r:18, hp:72,  speed:46,  dmg:16, xp:5, color:"#6fae57", wob:false, shape:"zombie"    },
+  tank:      { r:26, hp:135, speed:38,  dmg:20, xp:8, color:"#b15de0", wob:false, shape:"tank"      },
 };
 function spawnEnemy() {
   const p = game.player;
   const ang = Math.random() * TAU;
   const d = Math.max(W, H) * 0.62 + 80;
-  // difficulty scaling by time
   const t = game.time;
-  let type = "fly";
+  // mix shifts toward tougher, weirder enemies over time
   const r = Math.random();
-  if (t > 240 && r < 0.16) type = "tank";
-  else if (t > 90 && r < 0.32) type = "beetle";
-  else if (t > 40 && r < 0.5) type = "wasp";
+  let type;
+  if      (t > 200 && r < 0.10) type = "tank";
+  else if (t > 150 && r < 0.24) type = "zombie";
+  else if (t > 70  && r < 0.38) type = "beetle";
+  else if (t > 45  && r < 0.52) type = "bat";
+  else if (t > 25  && r < 0.64) type = "wasp";
+  else if (t > 12  && r < 0.74) type = "butterfly";
+  else type = "fly";
   const base = ENEMY_TYPES[type];
   const hpScale = 1 + t / 185;
   game.enemies.push({
@@ -425,13 +434,20 @@ function equipItem(it) {
   banner(`${it.ico} ${it.name} を装備！`);
 }
 function openChest(c) {
-  Audio.chest();
   for (let i = 0; i < 18; i++)
     game.particles.push({ x:c.x, y:c.y, vx:rand(-160,160), vy:rand(-200,40), t:rand(.3,.7), c:"#ffd24b", r:rand(1.5,3.5) });
-  showChoices("🎁 おたから！", "装備を1つ選んで身につけろ", rollEquip(),
-    it => `<div class="ico">${it.ico}</div><div class="name">${it.name}</div>`+
-          `<div class="desc">${it.desc}</div><div class="lvl">${it.slot === "head" ? "頭" : "胴"}装備</div>`,
-    equipItem);
+  // ~50% heal, ~50% equipment choice
+  if (Math.random() < 0.5) {
+    const p = game.player, heal = Math.round(p.maxhp * 0.5);
+    p.hp = Math.min(p.maxhp, p.hp + heal);
+    banner(`❤️ HP +${heal} 回復！`); Audio.heal();
+  } else {
+    Audio.chest();
+    showChoices("🎁 おたから！", "装備を1つ選んで身につけろ", rollEquip(),
+      it => `<div class="ico">${it.ico}</div><div class="name">${it.name}</div>`+
+            `<div class="desc">${it.desc}</div><div class="lvl">${it.slot === "head" ? "頭" : "胴"}装備</div>`,
+      equipItem);
+  }
 }
 
 function update(dt) {
@@ -593,8 +609,10 @@ function shade(hex, f) {
 function mkCanvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
 function ell(x, cx, cy, rx, ry) { x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, TAU); x.fill(); }
 
-// player sprite (right-facing chameleon, drawn small then upscaled = chunky pixels)
-let PLAYER_SPRITE, ENEMY_SPRITES = {};
+// sprites drawn small then upscaled with nearest-neighbor = chunky pixels
+let PLAYER_SPRITE, ENEMY_SPRITES = {}, GEAR_SPRITES = {};
+const ENEMY_BR = 16, ENEMY_CS = 56;     // body radius / canvas size for creatures
+const GEAR_W = 38, GEAR_H = 40;         // gear baked at player-sprite resolution
 function buildSprites() {
   // ---- chameleon ----
   const w = 38, h = 28; PLAYER_SPRITE = mkCanvas(w, h);
@@ -621,35 +639,99 @@ function buildSprites() {
   x.fillStyle = "#eafff0"; ell(x, 32, 9.5, 3, 3);
   x.fillStyle = "#06120b"; ell(x, 33.2, 9.5, 1.4, 1.4);
 
-  // ---- bugs ---- (shaded sphere + eyes, per-type detail)
-  const BR = 16, cs = 44;
+  // ---- enemies: distinct silhouettes per shape ----
   for (const [type, base] of Object.entries(ENEMY_TYPES)) {
-    const cv2 = mkCanvas(cs, cs); ENEMY_SPRITES[type] = cv2;
-    const g2 = cv2.getContext("2d"); const cx = cs/2, cy = cs/2;
-    // wings (behind) for flyers
-    if (type === "fly" || type === "wasp") {
-      g2.fillStyle = "rgba(255,255,255,0.28)";
-      ell(g2, cx - BR*0.6, cy - BR*0.7, 7, 4); ell(g2, cx + BR*0.6, cy - BR*0.7, 7, 4);
-    }
-    // outline + shaded body
-    g2.fillStyle = "#06120b"; ell(g2, cx, cy, BR + 1.5, BR + 1.5);
-    const grad = g2.createRadialGradient(cx - 5, cy - 6, 2, cx, cy, BR);
-    grad.addColorStop(0, shade(base.color, 1.45));
-    grad.addColorStop(0.6, base.color);
-    grad.addColorStop(1, shade(base.color, 0.6));
-    g2.fillStyle = grad; ell(g2, cx, cy, BR, BR);
-    // beetle/tank legs
-    if (type === "beetle" || type === "tank") {
-      g2.strokeStyle = "#06120b"; g2.lineWidth = 2;
-      for (let s = -1; s <= 1; s += 2) for (let k = -1; k <= 1; k++) {
-        g2.beginPath(); g2.moveTo(cx + s*BR*0.5, cy + k*5); g2.lineTo(cx + s*(BR+5), cy + k*7); g2.stroke();
-      }
-    }
-    // wasp stripes
-    if (type === "wasp") { g2.fillStyle = "rgba(0,0,0,0.35)"; g2.fillRect(cx - BR, cy - 3, BR*2, 2.5); g2.fillRect(cx - BR, cy + 3, BR*2, 2.5); }
-    // eyes
-    g2.fillStyle = "#06120b"; ell(g2, cx - BR*0.32, cy - BR*0.18, BR*0.18, BR*0.18); ell(g2, cx + BR*0.32, cy - BR*0.18, BR*0.18, BR*0.18);
-    g2.fillStyle = "#fff"; ell(g2, cx - BR*0.32 + 1, cy - BR*0.18 - 1, BR*0.07, BR*0.07); ell(g2, cx + BR*0.32 + 1, cy - BR*0.18 - 1, BR*0.07, BR*0.07);
+    const cv2 = mkCanvas(ENEMY_CS, ENEMY_CS); ENEMY_SPRITES[type] = cv2;
+    const g2 = cv2.getContext("2d");
+    g2.translate(ENEMY_CS/2, ENEMY_CS/2);    // center origin
+    drawCreature(g2, base.shape, base.color, ENEMY_BR);
+  }
+
+  // ---- gear: baked at player-sprite resolution so it matches the pixel look ----
+  for (const v of ["helmet","feather","crown","goggle","armor","shell","giant","leaf"]) {
+    const gc = mkCanvas(GEAR_W, GEAR_H); GEAR_SPRITES[v] = gc;
+    const gx = gc.getContext("2d");
+    gx.translate(GEAR_W/2, GEAR_H/2);
+    drawGearShape(gx, v);
+  }
+}
+
+// ---- creature drawing helpers (center origin) ----
+function sphere(g, cx, cy, r, color) {
+  g.fillStyle = "#06120b"; ell(g, cx, cy, r + 1.5, r + 1.5);
+  const grad = g.createRadialGradient(cx - r*0.35, cy - r*0.4, 2, cx, cy, r);
+  grad.addColorStop(0, shade(color, 1.45)); grad.addColorStop(0.6, color); grad.addColorStop(1, shade(color, 0.6));
+  g.fillStyle = grad; ell(g, cx, cy, r, r);
+}
+function eyes(g, cx, cy, r, sp) {
+  g.fillStyle = "#06120b"; ell(g, cx - sp, cy, r, r); ell(g, cx + sp, cy, r, r);
+  g.fillStyle = "#fff"; ell(g, cx - sp + r*0.4, cy - r*0.4, r*0.4, r*0.4); ell(g, cx + sp + r*0.4, cy - r*0.4, r*0.4, r*0.4);
+}
+function rrect(g, x, y, w, h, r) {
+  g.beginPath(); g.moveTo(x+r, y);
+  g.arcTo(x+w, y, x+w, y+h, r); g.arcTo(x+w, y+h, x, y+h, r);
+  g.arcTo(x, y+h, x, y, r); g.arcTo(x, y, x+w, y, r); g.closePath(); g.fill();
+}
+function drawCreature(g, shape, color, R) {
+  g.lineCap = "round";
+  if (shape === "fly") {
+    g.fillStyle = "rgba(255,255,255,0.30)"; ell(g, -7, -9, 7, 4); ell(g, 7, -9, 7, 4);
+    sphere(g, 0, 0, R*0.85, color); eyes(g, 0, -2, 2.4, 4);
+  } else if (shape === "butterfly") {
+    g.fillStyle = shade(color, 0.7); ell(g, -12, -7, 10, 8); ell(g, 12, -7, 10, 8); ell(g, -10, 8, 8, 7); ell(g, 10, 8, 8, 7);
+    g.fillStyle = color; ell(g, -12, -7, 7, 6); ell(g, 12, -7, 7, 6); ell(g, -10, 8, 5.5, 5); ell(g, 10, 8, 5.5, 5);
+    g.fillStyle = "rgba(255,255,255,0.55)"; ell(g, -12, -7, 2.6, 2.6); ell(g, 12, -7, 2.6, 2.6);
+    g.fillStyle = "#2a1f2e"; ell(g, 0, 0, 3, 11);
+    g.strokeStyle = "#2a1f2e"; g.lineWidth = 1.4; g.beginPath();
+    g.moveTo(-1, -9); g.quadraticCurveTo(-5, -16, -8, -15); g.moveTo(1, -9); g.quadraticCurveTo(5, -16, 8, -15); g.stroke();
+    g.fillStyle = "#2a1f2e"; ell(g, -8, -15, 1.7, 1.7); ell(g, 8, -15, 1.7, 1.7);
+    eyes(g, 0, -4, 1.5, 2);
+  } else if (shape === "bat") {
+    g.fillStyle = "#2f2a45";
+    for (const dir of [-1, 1]) { g.beginPath(); g.moveTo(0, -2);
+      g.lineTo(dir*23, -9); g.lineTo(dir*19, 2); g.lineTo(dir*24, 7);
+      g.lineTo(dir*15, 6); g.lineTo(dir*13, 11); g.lineTo(dir*7, 6); g.lineTo(0, 7); g.closePath(); g.fill(); }
+    g.fillStyle = "#2f2a45";
+    g.beginPath(); g.moveTo(-5, -9); g.lineTo(-7, -17); g.lineTo(-1, -11); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(5, -9); g.lineTo(7, -17); g.lineTo(1, -11); g.closePath(); g.fill();
+    sphere(g, 0, 0, R*0.7, color);
+    g.fillStyle = "#ff5d5d"; ell(g, -3.6, -1, 2, 2); ell(g, 3.6, -1, 2, 2);
+    g.fillStyle = "#fff"; ell(g, -3, -1.6, 0.8, 0.8); ell(g, 4.2, -1.6, 0.8, 0.8);
+  } else if (shape === "wasp") {
+    g.fillStyle = "rgba(255,255,255,0.30)"; ell(g, -6, -9, 7, 4); ell(g, 6, -9, 7, 4);
+    sphere(g, 0, 0, R*0.82, color);
+    g.fillStyle = "rgba(0,0,0,0.55)"; g.fillRect(-R*0.8, -3.2, R*1.6, 2.6); g.fillRect(-R*0.8, 2, R*1.6, 2.6);
+    g.fillStyle = "#06120b"; g.beginPath(); g.moveTo(0, R*0.9); g.lineTo(-2, R*0.5); g.lineTo(2, R*0.5); g.closePath(); g.fill();
+    eyes(g, 0, -2, 2.2, 4);
+  } else if (shape === "beetle") {
+    g.strokeStyle = "#06120b"; g.lineWidth = 2;
+    for (let s = -1; s <= 1; s += 2) for (let k = -1; k <= 1; k++) { g.beginPath(); g.moveTo(s*R*0.6, k*6); g.lineTo(s*(R+6), k*9); g.stroke(); }
+    sphere(g, 0, -R+2, 5, shade(color, 0.8));
+    g.strokeStyle = "#06120b"; g.lineWidth = 1.4; g.beginPath(); g.moveTo(-2, -R-1); g.lineTo(-5, -R-6); g.moveTo(2, -R-1); g.lineTo(5, -R-6); g.stroke();
+    sphere(g, 0, 1, R*0.95, color);
+    g.strokeStyle = shade(color, 0.5); g.lineWidth = 1.6; g.beginPath(); g.moveTo(0, -R*0.7+1); g.lineTo(0, R*0.85); g.stroke();
+    g.fillStyle = shade(color, 1.4); ell(g, -5, -3, 2, 2);
+  } else if (shape === "zombie") {
+    g.fillStyle = shade(color, 0.7); g.fillRect(-R-2, -2, 6, 5); g.fillRect(R-4, -2, 6, 5);
+    g.fillStyle = "#06120b"; rrect(g, -R, -R, R*2, R*2, 6);
+    const grad = g.createLinearGradient(0, -R, 0, R);
+    grad.addColorStop(0, shade(color, 1.3)); grad.addColorStop(1, shade(color, 0.62));
+    g.fillStyle = grad; rrect(g, -R+2, -R+2, (R-2)*2, (R-2)*2, 5);
+    g.strokeStyle = shade(color, 0.5); g.lineWidth = 1; g.beginPath(); g.moveTo(-R+3, 2); g.lineTo(R-3, 0); g.stroke();
+    g.strokeStyle = "#06120b"; g.lineWidth = 1.7;
+    g.beginPath(); g.moveTo(-8, -6); g.lineTo(-3, -1); g.moveTo(-3, -6); g.lineTo(-8, -1);
+    g.moveTo(3, -6); g.lineTo(8, -1); g.moveTo(8, -6); g.lineTo(3, -1); g.stroke();
+    g.beginPath(); g.moveTo(-5, 7); g.lineTo(5, 7);
+    g.moveTo(-3, 6); g.lineTo(-3, 8); g.moveTo(0, 6); g.lineTo(0, 8); g.moveTo(3, 6); g.lineTo(3, 8); g.stroke();
+  } else { // tank (spiked boss bug)
+    g.fillStyle = shade(color, 0.6);
+    for (let i = 0; i < 10; i++) { const a = i/10*TAU, c = Math.cos(a), s = Math.sin(a);
+      g.beginPath(); g.moveTo(c*R - s*3, s*R + c*3); g.lineTo(c*(R+6), s*(R+6)); g.lineTo(c*R + s*3, s*R - c*3); g.closePath(); g.fill(); }
+    g.strokeStyle = "#06120b"; g.lineWidth = 2.5;
+    for (let s = -1; s <= 1; s += 2) for (let k = -1; k <= 1; k++) { g.beginPath(); g.moveTo(s*R*0.6, k*7); g.lineTo(s*(R+7), k*11); g.stroke(); }
+    sphere(g, 0, 0, R, color);
+    eyes(g, 0, -2, 3.2, 5);
+    g.strokeStyle = "#06120b"; g.lineWidth = 2; g.beginPath(); g.moveTo(-9, -8); g.lineTo(-3, -5); g.moveTo(9, -8); g.lineTo(3, -5); g.stroke();
   }
 }
 function blit(spr, wx, wy, scale, flipX) {
@@ -760,8 +842,7 @@ function render() {
   // food morsels flying to the mouth (draw above enemies)
   for (const f of game.food) {
     if (f.delay > 0) continue;
-    const spr = ENEMY_SPRITES[f.type];
-    blit(spr, f.x, f.y, (f.r * 2) / spr.height, false);
+    blit(ENEMY_SPRITES[f.type], f.x, f.y, f.r / ENEMY_BR, false);
   }
 
   // particles
@@ -857,8 +938,7 @@ function drawEnemy(e) {
   const bob = e.wob ? Math.sin(e.phase)*2 : 0;
   groundShadow(e.x, e.y + e.r*0.4, e.r);
   const spr = ENEMY_SPRITES[e.type];
-  const scale = (e.r * 2.2) / spr.height;
-  blit(spr, e.x, e.y + bob, scale, false);
+  blit(spr, e.x, e.y + bob, e.r / ENEMY_BR, false);
   if (e.hit > 0) {                          // white hit flash
     ctx.globalAlpha = clamp(e.hit / 0.12, 0, 1) * 0.8;
     ctx.fillStyle = "#ffffff";
@@ -887,7 +967,9 @@ function drawPlayer() {
   ctx.scale(s, s);
   const SW = PLAYER_SPRITE.width, SH = PLAYER_SPRITE.height;
   ctx.drawImage(PLAYER_SPRITE, -SW/2, -SH/2);
-  drawGear(p);                                          // equipment overlays (sprite-local coords)
+  // equipment overlays: baked dot-art sprites, upscaled with the body
+  if (p.equip.body) ctx.drawImage(GEAR_SPRITES[p.equip.body.visual], -GEAR_W/2, -GEAR_H/2);
+  if (p.equip.head) ctx.drawImage(GEAR_SPRITES[p.equip.head.visual], -GEAR_W/2, -GEAR_H/2);
   ctx.restore();
   // shield ring (screen space)
   if (p.mods.shield && p.shield) {
@@ -896,33 +978,28 @@ function drawPlayer() {
     ctx.beginPath(); ctx.arc(p.x, p.y + bob, p.r*sz + 7, 0, TAU); ctx.stroke();
   }
 }
-// equipment cosmetics, drawn in sprite-local coords (origin = sprite center).
-// sprite is 38x28; head/eye ≈ (+13,-3), body ≈ (+1,+1).
-function drawGear(p) {
-  const body = p.equip.body, head = p.equip.head;
-  if (body) switch (body.visual) {
-    case "armor": ctx.fillStyle = "#c0392b"; ell(ctx, 1, 2, 9, 6);
-      ctx.fillStyle = "#e05a4a"; ctx.fillRect(-6, -2, 14, 2.5); break;
-    case "shell": ctx.fillStyle = "#7a4a1c"; ell(ctx, 1, -1, 11, 8);
-      ctx.fillStyle = "#9c6228"; ell(ctx, -1, -2, 5, 4);
-      ctx.strokeStyle = "#3a2410"; ctx.lineWidth = 1; ctx.stroke(); break;
-    case "giant": ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.ellipse(2, 1, 14, 11, 0, 0, TAU); ctx.stroke(); break;
-    case "leaf": ctx.fillStyle = "#2f9c4f";
-      for (let i = -1; i <= 1; i++) { ctx.save(); ctx.translate(i*6, -6); ctx.rotate(i*0.4);
-        ell(ctx, 0, 0, 4, 2.2); ctx.restore(); } break;
-  }
-  if (head) switch (head.visual) {
-    case "helmet": ctx.fillStyle = "#9aa3ad"; ctx.beginPath();
-      ctx.arc(12, -4, 7, Math.PI, TAU); ctx.fill();
-      ctx.fillStyle = "#c5ccd4"; ctx.fillRect(5, -4, 14, 2); break;
-    case "feather": ctx.fillStyle = "#39d6ff"; ctx.beginPath();
-      ctx.moveTo(9, -8); ctx.lineTo(17, -16); ctx.lineTo(13, -6); ctx.closePath(); ctx.fill(); break;
-    case "crown": ctx.fillStyle = "#ffd24b"; ctx.beginPath();
-      ctx.moveTo(7, -8); ctx.lineTo(9, -14); ctx.lineTo(12, -9); ctx.lineTo(15, -14); ctx.lineTo(17, -8);
-      ctx.closePath(); ctx.fill(); break;
-    case "goggle": ctx.fillStyle = "#222"; ctx.fillRect(8, -6, 12, 3);
-      ctx.fillStyle = "#ff5d7e"; ctx.fillRect(13, -6, 4, 3); break;
+// equipment cosmetic, drawn at center origin (matches player content center).
+// head/eye ≈ (+13,-3), body ≈ (+1,+1) in sprite-local coords.
+function drawGearShape(g, visual) {
+  switch (visual) {
+    case "armor": g.fillStyle = "#c0392b"; ell(g, 1, 2, 9, 6);
+      g.fillStyle = "#e05a4a"; g.fillRect(-6, -2, 14, 2.5);
+      g.fillStyle = "#7a1f17"; g.fillRect(-6, 3, 14, 1.5); break;
+    case "shell": g.fillStyle = "#7a4a1c"; ell(g, 1, -1, 11, 8);
+      g.fillStyle = "#9c6228"; ell(g, -1, -2, 5, 4);
+      g.strokeStyle = "#3a2410"; g.lineWidth = 1; g.beginPath(); g.ellipse(1, -1, 11, 8, 0, 0, TAU); g.stroke(); break;
+    case "giant": g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 1.5;
+      g.beginPath(); g.ellipse(2, 1, 14, 11, 0, 0, TAU); g.stroke(); break;
+    case "leaf": g.fillStyle = "#2f9c4f";
+      for (let i = -1; i <= 1; i++) { g.save(); g.translate(i*6, -6); g.rotate(i*0.4); ell(g, 0, 0, 4, 2.2); g.restore(); } break;
+    case "helmet": g.fillStyle = "#9aa3ad"; g.beginPath(); g.arc(12, -4, 7, Math.PI, TAU); g.fill();
+      g.fillStyle = "#c5ccd4"; g.fillRect(5, -4, 14, 2); break;
+    case "feather": g.fillStyle = "#39d6ff"; g.beginPath();
+      g.moveTo(9, -8); g.lineTo(17, -16); g.lineTo(13, -6); g.closePath(); g.fill(); break;
+    case "crown": g.fillStyle = "#ffd24b"; g.beginPath();
+      g.moveTo(7, -8); g.lineTo(9, -14); g.lineTo(12, -9); g.lineTo(15, -14); g.lineTo(17, -8); g.closePath(); g.fill(); break;
+    case "goggle": g.fillStyle = "#222"; g.fillRect(8, -6, 12, 3);
+      g.fillStyle = "#ff5d7e"; g.fillRect(13, -6, 4, 3); break;
   }
 }
 
