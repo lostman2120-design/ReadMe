@@ -182,6 +182,11 @@ const Audio = (() => {
 // ============================================================
 //  Game state
 // ============================================================
+// directional character art (official sprites)
+const CHAR = {};
+for (const dir of ["front", "back", "left", "right"]) {
+  const im = new Image(); im.src = "assets/char_" + dir + ".png"; CHAR[dir] = im;
+}
 let game;
 function newGame() {
   return {
@@ -192,7 +197,7 @@ function newGame() {
     cam: { x:0, y:0 },
     player: {
       x:0, y:0, r:18, speed:185, hp:100, maxhp:100,
-      facing:{x:1,y:0},
+      facing:{x:1,y:0}, dir:"front",
       iframe:0,
       // weapon: tongue
       tongueCd:0, tongueRate:0.7, tongueRange:240, tongueDmg:14, tongueWidth:14,
@@ -470,6 +475,9 @@ function update(dt) {
     const sp = p.speed * p.mods.speed;
     p.x += mx * sp * dt; p.y += my * sp * dt;
     p.facing.x = mx; p.facing.y = my;
+    // 4-directional sprite selection (down=front, up=back)
+    if (Math.abs(mx) > Math.abs(my)) p.dir = mx < 0 ? "left" : "right";
+    else p.dir = my < 0 ? "back" : "front";
   }
 
   // ---- camera ----
@@ -1014,19 +1022,25 @@ function drawPlayer() {
   const p = game.player;
   const sz = p.mods.size;
   const bob = Math.sin(game.time * 8) * 1.5;
-  groundShadow(p.x, p.y + p.r*1.3*sz, p.r*sz*0.8);
+  const chomp = p.chomp > 0 ? 1 + Math.sin((1 - p.chomp/0.15) * Math.PI) * 0.12 : 1;
+  groundShadow(p.x, p.y + p.r*0.95*sz, p.r*sz*0.85);
   ctx.save();
-  ctx.translate(p.x, p.y + bob);
-  if (p.iframe > 0 && Math.floor(p.iframe*20) % 2) ctx.globalAlpha = 0.45;
-  if (p.facing.x < 0) ctx.scale(-1, 1);                 // flip L/R, no rotation
-  let s = (p.r * 2.7 * sz) / PLAYER_SPRITE.height;
-  if (p.chomp > 0) s *= 1 + Math.sin((1 - p.chomp/0.15) * Math.PI) * 0.14;  // chomp pulse
-  ctx.scale(s, s);
-  const SW = PLAYER_SPRITE.width, SH = PLAYER_SPRITE.height;
-  ctx.drawImage(PLAYER_SPRITE, -SW/2, -SH/2);
-  // equipment overlays: baked dot-art sprites, upscaled with the body
-  if (p.equip.body) ctx.drawImage(GEAR_SPRITES[p.equip.body.visual], -GEAR_W/2, -GEAR_H/2);
-  if (p.equip.head) ctx.drawImage(GEAR_SPRITES[p.equip.head.visual], -GEAR_W/2, -GEAR_H/2);
+  if (p.iframe > 0 && Math.floor(p.iframe*20) % 2) ctx.globalAlpha = 0.5;
+  const img = CHAR[p.dir];
+  if (img && img.complete && img.naturalHeight) {
+    const targetH = p.r * 3.1 * sz * chomp;
+    const s = targetH / img.naturalHeight;
+    const w = img.naturalWidth * s, h = img.naturalHeight * s;
+    const feetY = p.y + p.r * 0.95 * sz + bob;
+    const prev = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(img, p.x - w/2, feetY - h, w, h);
+    ctx.imageSmoothingEnabled = prev;
+  } else {                                   // fallback: hand-drawn sprite
+    ctx.translate(p.x, p.y + bob);
+    const s = (p.r * 2.7 * sz * chomp) / PLAYER_SPRITE.height;
+    ctx.scale(s, s);
+    ctx.drawImage(PLAYER_SPRITE, -PLAYER_SPRITE.width/2, -PLAYER_SPRITE.height/2);
+  }
   ctx.restore();
   // shield ring (screen space)
   if (p.mods.shield && p.shield) {
