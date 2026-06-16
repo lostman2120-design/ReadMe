@@ -43,7 +43,7 @@
 
   <div id="title" class="overlay">
     <h1>🦎 CHAMELEON<br>SURVIVORS</h1>
-    <div class="sub">迫りくる虫の群れを、伸びる舌で食べ尽くせ。<br>
+    <div class="sub">カメレオン女子になって、迫りくる虫の群れを伸びる舌でもぐもぐ食べ尽くせ。<br>
       生き延びてレベルアップ、自分だけのビルドを完成させろ。</div>
     <div>
       <span class="pill">移動: WASD / 矢印 / ドラッグ</span>
@@ -608,36 +608,16 @@ function shade(hex, f) {
 }
 function mkCanvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
 function ell(x, cx, cy, rx, ry) { x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, TAU); x.fill(); }
+function tri(g, ax, ay, bx, by, cx, cy) { g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(cx, cy); g.closePath(); g.fill(); }
 
 // sprites drawn small then upscaled with nearest-neighbor = chunky pixels
 let PLAYER_SPRITE, ENEMY_SPRITES = {}, GEAR_SPRITES = {};
 const ENEMY_BR = 16, ENEMY_CS = 56;     // body radius / canvas size for creatures
-const GEAR_W = 38, GEAR_H = 40;         // gear baked at player-sprite resolution
+const GEAR_W = 44, GEAR_H = 66;         // gear baked at player-sprite resolution
 function buildSprites() {
-  // ---- chameleon ----
-  const w = 38, h = 28; PLAYER_SPRITE = mkCanvas(w, h);
-  const x = PLAYER_SPRITE.getContext("2d");
-  const OUT = "#13301c", BODY = "#5fd17a", LITE = "#9bf0a8", DARK = "#39884f";
-  // tail spiral (outline + fill)
-  x.lineCap = "round";
-  x.strokeStyle = OUT; x.lineWidth = 7; x.beginPath(); x.arc(9, 16, 5.5, Math.PI*0.15, Math.PI*1.85); x.stroke();
-  x.strokeStyle = BODY; x.lineWidth = 4; x.beginPath(); x.arc(9, 16, 5.5, Math.PI*0.15, Math.PI*1.85); x.stroke();
-  // legs
-  x.fillStyle = OUT; x.fillRect(15, 19, 4, 6); x.fillRect(23, 19, 4, 7);
-  // body + head outline
-  x.fillStyle = OUT; ell(x, 20, 15, 13, 10); ell(x, 30, 12, 7.5, 7);
-  // body + head fill
-  x.fillStyle = BODY; ell(x, 20, 15, 11.5, 8.5); ell(x, 30, 12, 6, 5.5);
-  // lower shadow + upper highlight (volume)
-  x.fillStyle = DARK; ell(x, 20, 19, 10, 3.4);
-  x.fillStyle = LITE; ell(x, 17, 11, 6.5, 3);
-  // back crest
-  x.fillStyle = DARK;
-  for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(13 + i*4, 7); x.lineTo(15 + i*4, 3); x.lineTo(17 + i*4, 7); x.fill(); }
-  // eye turret
-  x.fillStyle = OUT; ell(x, 32, 9.5, 4.5, 4.5);
-  x.fillStyle = "#eafff0"; ell(x, 32, 9.5, 3, 3);
-  x.fillStyle = "#06120b"; ell(x, 33.2, 9.5, 1.4, 1.4);
+  // ---- chameleon girl (front-facing chibi) ----
+  PLAYER_SPRITE = mkCanvas(44, 66);
+  drawGirl(PLAYER_SPRITE.getContext("2d"));
 
   // ---- enemies: distinct silhouettes per shape ----
   for (const [type, base] of Object.entries(ENEMY_TYPES)) {
@@ -654,6 +634,83 @@ function buildSprites() {
     gx.translate(GEAR_W/2, GEAR_H/2);
     drawGearShape(gx, v);
   }
+}
+
+// ---- chameleon girl sprite (44x66 master, front-facing chibi) ----
+// Built at a larger resolution so the face/eyes carry real detail, then
+// drawn down to the in-game size. Orange/green hair, pale-green skin,
+// amber reptile (slit-pupil) eyes.
+function drawGirl(x) {
+  const OUT = "#33291f", SKIN = "#d3f0bd", SKND = "#b6dd9a",
+        ORG = "#ff9a3c", ORGD = "#e07a22", GRN = "#66c24a", GRND = "#45923a",
+        WHITE = "#f6f5ef", DARK = "#2c2a33",
+        IRL = "#ffd76b", IRD = "#e68a2e", PUP = "#4a2a12";
+  x.lineCap = "round"; x.lineJoin = "round";
+  // chameleon tail: curls out to her right, tapering orange->green
+  const tail = [[31,48,6,ORG],[36,48,5.2,ORG],[40,44,4.4,ORGD],[41,39,3.6,GRN],[39,35,2.9,GRN],[36,34,2.3,GRND]];
+  for (const [tx,ty,tr] of tail) { x.fillStyle = OUT; ell(x, tx, ty, tr+1.2, tr+1.2); }
+  for (const [tx,ty,tr,tc] of tail) { x.fillStyle = tc; ell(x, tx, ty, tr, tr); }
+  // back hair twin-tails (narrow, hanging beside the body -> keeps a waist)
+  x.fillStyle = OUT; ell(x, 9, 38, 7, 22); ell(x, 35, 38, 7, 22);
+  x.fillStyle = ORG; ell(x, 9, 37, 5.8, 20.5); x.fillStyle = GRN; ell(x, 35, 37, 5.8, 20.5);
+  x.fillStyle = shade(ORG,1.18); ell(x, 7.5, 30, 2, 9); x.fillStyle = shade(GRN,1.18); ell(x, 36.5, 30, 2, 9); // strand highlight
+  x.fillStyle = ORGD; ell(x, 8, 55, 3.8, 8); x.fillStyle = GRND; ell(x, 36, 55, 3.8, 8); // tips
+  // legs + striped legwarmers + platform shoes
+  x.fillStyle = OUT; x.fillRect(16,48,5.5,14); x.fillRect(22.5,48,5.5,14);
+  x.fillStyle = SKIN; x.fillRect(16.5,48,4.5,6); x.fillRect(23,48,4.5,6);
+  for (let i = 0; i < 4; i++) { x.fillStyle = i%2 ? ORG : GRN; x.fillRect(16.5,54+i*1.7,4.5,1.7); x.fillRect(23,54+i*1.7,4.5,1.7); }
+  x.fillStyle = DARK; x.fillRect(15,61,6.5,5); x.fillRect(22.5,61,6.5,5);
+  x.fillStyle = ORG; x.fillRect(15,65,6.5,1.4); x.fillStyle = "#fff"; x.fillRect(16.5,62.5,1.8,1.8); x.fillRect(24.5,62.5,1.8,1.8);
+  // frilly skirt + belt + buckle
+  x.fillStyle = OUT; x.beginPath(); x.moveTo(11,40); x.lineTo(33,40); x.lineTo(35,51); x.lineTo(9,51); x.closePath(); x.fill();
+  x.fillStyle = DARK; x.beginPath(); x.moveTo(13,41); x.lineTo(31,41); x.lineTo(33,50); x.lineTo(11,50); x.closePath(); x.fill();
+  x.fillStyle = WHITE; x.fillRect(10,49,24,2.2);
+  x.fillStyle = GRN; x.fillRect(12,39.4,20,2.6); x.fillStyle = ORG; x.fillRect(20,39.2,4,3);
+  // torso: crop top + midriff + bow
+  x.fillStyle = OUT; ell(x, 22, 36, 7.6, 7);
+  x.fillStyle = SKIN; ell(x, 22, 37.5, 5.6, 5.2);
+  x.fillStyle = SKND; ell(x, 22, 39.5, 4.4, 2.4);
+  x.fillStyle = WHITE; x.beginPath(); x.moveTo(15,29); x.lineTo(29,29); x.lineTo(28,35.5); x.lineTo(16,35.5); x.closePath(); x.fill();
+  x.fillStyle = "#dfe3ee"; x.fillRect(15.5,29.8,13,1.4);
+  x.fillStyle = ORG; ell(x, 22, 33, 2.8, 1.9); x.fillStyle = ORGD; ell(x, 22, 33, 1, 1);
+  // paw mittens (hands up by the face)
+  for (const px of [9, 35]) { x.fillStyle = OUT; ell(x, px, 31, 5.6, 5.6); x.fillStyle = WHITE; ell(x, px, 31, 4.8, 4.8); x.fillStyle = ORG; ell(x, px, 32.6, 1.8, 1.4); }
+  // head
+  x.fillStyle = OUT; ell(x, 22, 19, 11, 10.5);
+  x.fillStyle = SKIN; ell(x, 22, 19.6, 9.7, 9.4);
+  x.fillStyle = SKND; ell(x, 22, 26, 6, 2.6);           // jaw shade
+  // chameleon ears (orange left, green right)
+  x.fillStyle = OUT; tri(x, 10,11, 15,1, 19,13); tri(x, 34,11, 29,1, 25,13);
+  x.fillStyle = ORG; tri(x, 11.5,11, 15,3.5, 17,13); x.fillStyle = GRN; tri(x, 32.5,11, 29,3.5, 27,13);
+  x.fillStyle = shade(ORG,0.7); tri(x, 13.5,11, 15,6, 16,12.5); x.fillStyle = shade(GRN,0.7); tri(x, 30.5,11, 29,6, 28,12.5);
+  // front bangs split orange/green
+  x.fillStyle = ORG; x.beginPath(); x.moveTo(11,12); x.lineTo(22,8); x.lineTo(22,21); x.lineTo(13,20); x.closePath(); x.fill();
+  x.fillStyle = GRN; x.beginPath(); x.moveTo(33,12); x.lineTo(22,8); x.lineTo(22,21); x.lineTo(31,20); x.closePath(); x.fill();
+  x.fillStyle = shade(ORG,1.2); tri(x, 13,12, 18,9, 16,18); x.fillStyle = shade(GRN,1.2); tri(x, 31,12, 26,9, 28,18); // bang sheen
+  x.fillStyle = ORGD; tri(x, 15,20, 18,13, 20,20); x.fillStyle = GRND; tri(x, 29,20, 26,13, 24,20); // bang tips
+  // hair clips (little flowers)
+  x.fillStyle = "#ffd24b"; for (let k=0;k<5;k++){ const a=k/5*TAU; ell(x, 14+Math.cos(a)*1.4, 14+Math.sin(a)*1.4, 1, 1);} x.fillStyle="#fff"; ell(x,14,14,0.8,0.8);
+  x.fillStyle = GRN; for (let k=0;k<5;k++){ const a=k/5*TAU; ell(x, 30+Math.cos(a)*1.4, 14+Math.sin(a)*1.4, 1, 1);} x.fillStyle="#fff"; ell(x,30,14,0.8,0.8);
+  // ---- eyes (detailed, amber, vertical reptile slit) ----
+  for (const ex of [17, 27]) {
+    x.fillStyle = OUT; ell(x, ex, 20.5, 3.4, 4.0);            // lash frame
+    x.fillStyle = WHITE; ell(x, ex, 21, 2.8, 3.3);            // sclera
+    x.fillStyle = IRL; ell(x, ex, 21.3, 2.5, 3.0);            // iris (light base)
+    x.fillStyle = IRD; ell(x, ex, 20.1, 2.5, 2.1);            // iris upper shade
+    x.fillStyle = PUP; ell(x, ex, 20.9, 0.75, 2.4);           // slit pupil
+    x.fillStyle = "#fff"; ell(x, ex-1.1, 19.0, 1.3, 1.5);     // big highlight
+    x.fillStyle = "rgba(255,255,255,0.85)"; ell(x, ex+1.0, 22.3, 0.7, 0.7); // small highlight
+    x.strokeStyle = OUT; x.lineWidth = 1.6; x.lineCap = "round";  // upper lash line
+    x.beginPath(); x.arc(ex, 21, 3.5, Math.PI*1.04, Math.PI*1.96); x.stroke();
+    x.fillStyle = OUT; tri(x, ex+(ex<22?-3.4:3.4), 18.4, ex+(ex<22?-2:2), 19.6, ex+(ex<22?-4.4:4.4), 17.4); // outer flick
+  }
+  // brows (short, matching hair)
+  x.strokeStyle = ORGD; x.lineWidth = 1.3; x.beginPath(); x.moveTo(14,16); x.lineTo(19,16.4); x.stroke();
+  x.strokeStyle = GRND; x.beginPath(); x.moveTo(30,16); x.lineTo(25,16.4); x.stroke();
+  // blush + mouth + tiny tongue
+  x.fillStyle = "rgba(255,150,90,0.5)"; ell(x, 13.5, 24.5, 2.3, 1.4); ell(x, 30.5, 24.5, 2.3, 1.4);
+  x.fillStyle = OUT; x.beginPath(); x.arc(22, 25.5, 2, Math.PI*0.15, Math.PI*0.85); x.lineWidth=1.2; x.strokeStyle=OUT; x.stroke();
+  x.fillStyle = "#ff7a6a"; ell(x, 22, 26.6, 1.3, 0.9);     // little tongue
 }
 
 // ---- creature drawing helpers (center origin) ----
@@ -957,7 +1014,7 @@ function drawPlayer() {
   const p = game.player;
   const sz = p.mods.size;
   const bob = Math.sin(game.time * 8) * 1.5;
-  groundShadow(p.x, p.y + p.r*0.5*sz, p.r*sz);
+  groundShadow(p.x, p.y + p.r*1.3*sz, p.r*sz*0.8);
   ctx.save();
   ctx.translate(p.x, p.y + bob);
   if (p.iframe > 0 && Math.floor(p.iframe*20) % 2) ctx.globalAlpha = 0.45;
@@ -978,28 +1035,30 @@ function drawPlayer() {
     ctx.beginPath(); ctx.arc(p.x, p.y + bob, p.r*sz + 7, 0, TAU); ctx.stroke();
   }
 }
-// equipment cosmetic, drawn at center origin (matches player content center).
-// head/eye ≈ (+13,-3), body ≈ (+1,+1) in sprite-local coords.
+// equipment cosmetic, drawn at center origin (player content center).
+// head ≈ (0,-14), eyes ≈ (0,-12), torso ≈ (0,+3) in sprite-local coords.
 function drawGearShape(g, visual) {
+  g.lineJoin = "round";
   switch (visual) {
-    case "armor": g.fillStyle = "#c0392b"; ell(g, 1, 2, 9, 6);
-      g.fillStyle = "#e05a4a"; g.fillRect(-6, -2, 14, 2.5);
-      g.fillStyle = "#7a1f17"; g.fillRect(-6, 3, 14, 1.5); break;
-    case "shell": g.fillStyle = "#7a4a1c"; ell(g, 1, -1, 11, 8);
-      g.fillStyle = "#9c6228"; ell(g, -1, -2, 5, 4);
-      g.strokeStyle = "#3a2410"; g.lineWidth = 1; g.beginPath(); g.ellipse(1, -1, 11, 8, 0, 0, TAU); g.stroke(); break;
-    case "giant": g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 1.5;
-      g.beginPath(); g.ellipse(2, 1, 14, 11, 0, 0, TAU); g.stroke(); break;
+    case "armor": g.fillStyle = "#c0392b"; ell(g, 0, 3, 9, 6);
+      g.fillStyle = "#e05a4a"; g.fillRect(-7, 0, 14, 2.4);
+      g.fillStyle = "#7a1f17"; g.fillRect(-7, 4, 14, 1.8); break;
+    case "shell": g.fillStyle = "#7a4a1c"; ell(g, 0, 2, 11, 10);
+      g.fillStyle = "#9c6228"; ell(g, -2.5, -1, 5, 4);
+      g.strokeStyle = "#3a2410"; g.lineWidth = 1.2; g.beginPath(); g.ellipse(0, 2, 11, 10, 0, 0, TAU); g.stroke(); break;
+    case "giant": g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 1.8;
+      g.beginPath(); g.ellipse(0, 0, 17, 30, 0, 0, TAU); g.stroke(); break;
     case "leaf": g.fillStyle = "#2f9c4f";
-      for (let i = -1; i <= 1; i++) { g.save(); g.translate(i*6, -6); g.rotate(i*0.4); ell(g, 0, 0, 4, 2.2); g.restore(); } break;
-    case "helmet": g.fillStyle = "#9aa3ad"; g.beginPath(); g.arc(12, -4, 7, Math.PI, TAU); g.fill();
-      g.fillStyle = "#c5ccd4"; g.fillRect(5, -4, 14, 2); break;
+      for (let i = -1; i <= 1; i++) { g.save(); g.translate(i*8, -17); g.rotate(i*0.5); ell(g, 0, 0, 5, 2.6); g.restore(); } break;
+    case "helmet": g.fillStyle = "#9aa3ad"; g.beginPath(); g.arc(0, -17, 10, Math.PI, TAU); g.fill();
+      g.fillStyle = "#c5ccd4"; g.fillRect(-10, -17, 20, 2.4); break;
     case "feather": g.fillStyle = "#39d6ff"; g.beginPath();
-      g.moveTo(9, -8); g.lineTo(17, -16); g.lineTo(13, -6); g.closePath(); g.fill(); break;
+      g.moveTo(7, -19); g.lineTo(15, -30); g.lineTo(11, -17); g.closePath(); g.fill(); break;
     case "crown": g.fillStyle = "#ffd24b"; g.beginPath();
-      g.moveTo(7, -8); g.lineTo(9, -14); g.lineTo(12, -9); g.lineTo(15, -14); g.lineTo(17, -8); g.closePath(); g.fill(); break;
-    case "goggle": g.fillStyle = "#222"; g.fillRect(8, -6, 12, 3);
-      g.fillStyle = "#ff5d7e"; g.fillRect(13, -6, 4, 3); break;
+      g.moveTo(-9, -17); g.lineTo(-5, -25); g.lineTo(0, -18); g.lineTo(5, -25); g.lineTo(9, -17); g.closePath(); g.fill();
+      g.fillStyle = "#ff5d7e"; ell(g, 0, -19, 1.3, 1.3); break;
+    case "goggle": g.fillStyle = "#222"; g.fillRect(-10, -14, 20, 3.6);
+      g.fillStyle = "#ff5d7e"; g.fillRect(-9, -14, 3.6, 3.6); g.fillRect(5, -14, 3.6, 3.6); break;
   }
 }
 
