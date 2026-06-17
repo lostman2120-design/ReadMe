@@ -192,9 +192,12 @@ for (const d of DIRS) {
   const w1 = new Image(); w1.src = "assets/char_" + d + "_w1.png";
   CHAR[d] = { idle, walk: [w0, w1] };
 }
-// boss art (optional): falls back to code-drawn sprite until uploaded
+// boss art (8-directional): falls back to code-drawn sprite until uploaded
 const BOSS_IMG = {};
-for (const b of ["oni", "zonbi"]) { const im = new Image(); im.src = "assets/boss_" + b + ".png"; BOSS_IMG[b] = im; }
+for (const b of ["oni", "zonbi"]) {
+  BOSS_IMG[b] = {};
+  for (const d of DIRS) { const im = new Image(); im.src = `assets/boss_${b}_${d}.png`; BOSS_IMG[b][d] = im; }
+}
 let game;
 function newGame() {
   return {
@@ -345,7 +348,7 @@ function spawnBoss(cfg) {
   const ang = Math.random() * TAU, d = Math.max(W, H) * 0.6 + 100;
   const e = { type:cfg.shape, boss:true, bossImg:cfg.bossImg, name:cfg.name,
     x:p.x + Math.cos(ang)*d, y:p.y + Math.sin(ang)*d,
-    r:cfg.r, hp:cfg.hp, maxhp:cfg.hp, speed:cfg.speed, dmg:cfg.dmg, xp:cfg.xp,
+    r:cfg.r, hp:cfg.hp, maxhp:cfg.hp, speed:cfg.speed, dmg:cfg.dmg, xp:cfg.xp, dir:"front",
     color: cfg.shape === "oni" ? "#d23b2e" : "#6fae57", wob:false, hit:0, phase:0, kx:0, ky:0 };
   game.enemies.push(e); game.boss = e;
   banner(`⚠ ${cfg.name} 出現！`); Audio.boom(); game.shake = 14;
@@ -569,6 +572,7 @@ function update(dt) {
   for (const e of game.enemies) {
     if (e.dead) continue;
     let ang = Math.atan2(p.y - e.y, p.x - e.x);
+    if (e.boss) e.dir = DIRS8[((Math.round(ang / (Math.PI/4)) % 8) + 8) % 8];  // face the player
     e.phase += dt * 4;
     if (e.wob) ang += Math.sin(e.phase) * 0.5;
     e.x += Math.cos(ang) * e.speed * dt;
@@ -1067,8 +1071,9 @@ function drawEnemy(e) {
   const bob = e.wob ? Math.sin(e.phase)*2 : 0;
   groundShadow(e.x, e.y + e.r*0.4, e.r);
   if (e.boss) {
-    const im = BOSS_IMG[e.bossImg];
-    if (im && im.complete && im.naturalHeight) {     // uploaded boss art
+    const set = BOSS_IMG[e.bossImg];
+    const im = set && (set[e.dir] || set.front);
+    if (im && im.complete && im.naturalHeight) {     // uploaded boss art (directional)
       const s = (e.r * 3.0) / im.naturalHeight, w = im.naturalWidth*s, h = im.naturalHeight*s;
       const prev = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = true;
       ctx.drawImage(im, e.x - w/2, e.y + e.r*0.9 - h + bob, w, h);
