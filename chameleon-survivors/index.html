@@ -234,8 +234,8 @@ function newGame() {
     chestTimer: 14,
     boss: null,              // current live boss (for HP bar)
     bossQueue: [             // timed boss appearances (one-shot)
-      { bossImg:"oni",   shape:"oni",    name:"鬼",     time:180, hp:1800, r:58, speed:44, dmg:34, xp:120, done:false },
-      { bossImg:"zonbi", shape:"zombie", name:"ゾンビ", time:480, hp:7000, r:72, speed:38, dmg:50, xp:300, done:false },
+      { bossImg:"oni",   shape:"oni",    name:"鬼",     time:180, hp:1800, r:58, speed:152, dmg:34, xp:120, breathDmg:26, breathCol:"255,120,40", done:false },
+      { bossImg:"zonbi", shape:"zombie", name:"ゾンビ", time:480, hp:7000, r:72, speed:138, dmg:50, xp:300, breathDmg:38, breathCol:"150,230,90", done:false },
     ],
     banner: null,            // { text, t }
     flash: 0,                // white screen flash (nuke)
@@ -292,9 +292,9 @@ const ENEMY_TYPES = {
   zombie:    { r:18, hp:72,  speed:46,  dmg:16, xp:5, color:"#6fae57", wob:false, shape:"zombie"    },
   tank:      { r:26, hp:135, speed:38,  dmg:20, xp:8, color:"#b15de0", wob:false, shape:"tank"      },
 };
-function spawnEnemy() {
+function spawnEnemy(ang) {
   const p = game.player;
-  const ang = Math.random() * TAU;
+  if (ang === undefined) ang = Math.random() * TAU;
   const d = Math.max(W, H) * 0.62 + 80;
   const t = game.time;
   // mix shifts toward tougher, weirder enemies over time
@@ -349,6 +349,7 @@ function spawnBoss(cfg) {
   const e = { type:cfg.shape, boss:true, bossImg:cfg.bossImg, name:cfg.name,
     x:p.x + Math.cos(ang)*d, y:p.y + Math.sin(ang)*d,
     r:cfg.r, hp:cfg.hp, maxhp:cfg.hp, speed:cfg.speed, dmg:cfg.dmg, xp:cfg.xp, dir:"front",
+    breathDmg:cfg.breathDmg, breathCol:cfg.breathCol, atkCd:4, breath:null,
     color: cfg.shape === "oni" ? "#d23b2e" : "#6fae57", wob:false, hit:0, phase:0, kx:0, ky:0 };
   game.enemies.push(e); game.boss = e;
   banner(`⚠ ${cfg.name} 出現！`); Audio.boom(); game.shake = 14;
@@ -540,13 +541,20 @@ function update(dt) {
     if (p.tongueAnim[i].t <= 0) p.tongueAnim.splice(i, 1);
   }
 
-  // ---- spawn ---- (gentler ramp + hard cap on on-screen count)
+  // ---- spawn ---- (gentler ramp + hard cap; bias ahead so you can't outrun)
   game.spawnTimer -= dt;
   const cap = Math.min(210, 75 + game.time * 0.4);
   const spawnInterval = Math.max(0.32, 1.05 - game.time/380);
   if (game.spawnTimer <= 0 && game.enemies.length < cap) {
     const batch = 1 + Math.floor(game.time / 80);
-    for (let i = 0; i < batch; i++) spawnEnemy();
+    const moveAng = Math.atan2(p.facing.y, p.facing.x);
+    for (let i = 0; i < batch; i++) {
+      // after 2 min, send ~55% of spawns into the forward arc when moving
+      if (p.moving && game.time > 120 && Math.random() < 0.55)
+        spawnEnemy(moveAng + rand(-1.0, 1.0));
+      else
+        spawnEnemy();
+    }
     game.spawnTimer = spawnInterval;
   }
 
@@ -572,11 +580,34 @@ function update(dt) {
   for (const e of game.enemies) {
     if (e.dead) continue;
     let ang = Math.atan2(p.y - e.y, p.x - e.x);
-    if (e.boss) e.dir = DIRS8[((Math.round(ang / (Math.PI/4)) % 8) + 8) % 8];  // face the player
+    let spdScale = 1;
+    if (e.boss) {
+      e.dir = DIRS8[((Math.round(ang / (Math.PI/4)) % 8) + 8) % 8];  // face the player
+      const dpl = Math.hypot(p.x - e.x, p.y - e.y);
+      e.atkCd -= dt;
+      if (e.breath) {
+        e.breath.t -= dt; spdScale = 0.15;
+        if (e.breath.phase === "windup") {
+          if (e.breath.t <= 0) { e.breath.phase = "active"; e.breath.t = 0.4; }
+        } else {                                   // active: damage inside the cone
+          spdScale = 0;
+          const da = Math.atan2(Math.sin(ang - e.breath.ang), Math.cos(ang - e.breath.ang));
+          if (dpl < e.breath.len && Math.abs(da) < e.breath.half && p.iframe <= 0) {
+            p.hp -= e.breathDmg * p.mods.def; p.iframe = 0.7; game.shake = 12; Audio.hurt();
+            for (let i = 0; i < 8; i++) game.particles.push({ x:p.x, y:p.y, vx:rand(-150,150), vy:rand(-150,150), t:rand(.2,.5), c:`rgb(${e.breathCol})`, r:rand(1.5,3) });
+            if (p.hp <= 0) { gameOver(); return; }
+          }
+          if (e.breath.t <= 0) e.breath = null;
+        }
+      } else if (e.atkCd <= 0 && dpl < 280) {      // start a telegraphed breath
+        e.breath = { phase:"windup", t:0.6, ang, len:330, half:0.55 };
+        e.atkCd = 3.4; Audio.boom();
+      }
+    }
     e.phase += dt * 4;
     if (e.wob) ang += Math.sin(e.phase) * 0.5;
-    e.x += Math.cos(ang) * e.speed * dt;
-    e.y += Math.sin(ang) * e.speed * dt;
+    e.x += Math.cos(ang) * e.speed * spdScale * dt;
+    e.y += Math.sin(ang) * e.speed * spdScale * dt;
     // knockback decay
     e.x += e.kx * dt; e.y += e.ky * dt;
     e.kx *= 0.82; e.ky *= 0.82;
@@ -866,6 +897,25 @@ function blit(spr, wx, wy, scale, flipX) {
   ctx.drawImage(spr, -spr.width*scale/2, -spr.height*scale/2, spr.width*scale, spr.height*scale);
   ctx.restore();
 }
+function drawBreath(e) {
+  const { phase, ang, len, half } = e.breath;
+  ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(ang);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, len, -half, half); ctx.closePath();
+  if (phase === "windup") {                         // telegraph (pulsing outline)
+    ctx.fillStyle = `rgba(${e.breathCol},${0.10 + 0.10*Math.sin(game.time*22)})`; ctx.fill();
+    ctx.strokeStyle = `rgba(${e.breathCol},0.85)`; ctx.lineWidth = 2.5; ctx.stroke();
+  } else {                                           // active blast
+    const g = ctx.createRadialGradient(0, 0, e.r, 0, 0, len);
+    g.addColorStop(0, `rgba(${e.breathCol},0.9)`); g.addColorStop(1, `rgba(${e.breathCol},0.1)`);
+    ctx.fillStyle = g; ctx.fill();
+  }
+  ctx.restore();
+  if (phase === "active" && Math.random() < 0.7) {  // spew particles
+    const a = ang + rand(-half, half);
+    game.particles.push({ x:e.x + Math.cos(a)*e.r, y:e.y + Math.sin(a)*e.r,
+      vx:Math.cos(a)*rand(220,420), vy:Math.sin(a)*rand(220,420), t:rand(.2,.45), c:`rgb(${e.breathCol})`, r:rand(2,4) });
+  }
+}
 function groundShadow(wx, wy, r) {
   ctx.fillStyle = "rgba(0,0,0,0.22)";
   ctx.beginPath(); ctx.ellipse(wx, wy + r*0.6, r*0.95, r*0.4, 0, 0, TAU); ctx.fill();
@@ -964,6 +1014,8 @@ function render() {
 
   // enemies
   for (const e of game.enemies) drawEnemy(e);
+  // boss breath attacks (on top of enemies)
+  for (const e of game.enemies) if (e.boss && e.breath) drawBreath(e);
 
   // food morsels flying to the mouth (draw above enemies)
   for (const f of game.food) {
