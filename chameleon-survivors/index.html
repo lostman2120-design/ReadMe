@@ -925,17 +925,24 @@ function render() {
   }
   ctx.globalAlpha = 1;
 
-  // tongues
+  // tongues (sticky chameleon tongue from the mouth)
   const p = game.player;
+  const oy0 = p.y - p.r * 0.7 * p.mods.size;       // mouth height
   for (const t of p.tongueAnim) {
     const prog = 1 - (t.t / t.max);
     const reach = t.len * Math.sin(prog * Math.PI); // out then back
-    const ex = p.x + Math.cos(t.ang)*reach, ey = p.y + Math.sin(t.ang)*reach;
-    ctx.strokeStyle = "#ff5d7e"; ctx.lineCap = "round";
-    ctx.lineWidth = p.tongueWidth*1.4;
-    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(ex, ey); ctx.stroke();
-    ctx.beginPath(); ctx.arc(ex, ey, p.tongueWidth*0.9, 0, TAU);
-    ctx.fillStyle = "#ff7b95"; ctx.fill();
+    const ex = p.x + Math.cos(t.ang)*reach, ey = oy0 + Math.sin(t.ang)*reach;
+    const wd = p.tongueWidth;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#7a2a20"; ctx.lineWidth = wd*0.85 + 2.5;     // outline
+    ctx.beginPath(); ctx.moveTo(p.x, oy0); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.strokeStyle = "#ff6b5a"; ctx.lineWidth = wd*0.7;            // body
+    ctx.beginPath(); ctx.moveTo(p.x, oy0); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.strokeStyle = "#ffb4a0"; ctx.lineWidth = Math.max(1, wd*0.25); // core highlight
+    ctx.beginPath(); ctx.moveTo(p.x, oy0); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.fillStyle = "#7a2a20"; ctx.beginPath(); ctx.arc(ex, ey, wd*0.95 + 1.5, 0, TAU); ctx.fill(); // sticky pad
+    ctx.fillStyle = "#ff6b5a"; ctx.beginPath(); ctx.arc(ex, ey, wd*0.95, 0, TAU); ctx.fill();
+    ctx.fillStyle = "#ffb4a0"; ctx.beginPath(); ctx.arc(ex - wd*0.3, ey - wd*0.3, wd*0.38, 0, TAU); ctx.fill();
   }
 
   drawPlayer();
@@ -1035,8 +1042,8 @@ function drawPlayer() {
   if (p.iframe > 0 && Math.floor(p.iframe*20) % 2) ctx.globalAlpha = 0.5;
   const C = CHAR[p.dir] || CHAR.front;
   let img = C.idle;
-  if (p.moving) {                            // walk cycle (~7.7 fps)
-    const f = C.walk[Math.floor(p.walkT / 0.13) % C.walk.length];
+  if (p.moving) {                            // walk cycle (~5 fps)
+    const f = C.walk[Math.floor(p.walkT / 0.2) % C.walk.length];
     if (f && f.complete && f.naturalHeight) img = f;
   }
   if (img && img.complete && img.naturalHeight) {
