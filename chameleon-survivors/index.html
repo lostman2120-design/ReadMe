@@ -35,6 +35,20 @@
   .pill { display:inline-block; background:#16341f; border:1px solid #2c6b3f;
     padding:4px 10px; border-radius:999px; font-size:12px; margin:2px; }
   .hint { font-size:12px; opacity:.55; }
+  .btn2 { font-size:15px; padding:10px 22px; background:#16341f; color:var(--accent);
+    border:2px solid #2c6b3f; box-shadow:0 4px 0 #15301c; }
+  input.name { font:inherit; font-size:16px; text-align:center; padding:10px 14px; border-radius:10px;
+    border:2px solid #2c6b3f; background:#0c1f14; color:#eafff0; width:200px; outline:none; }
+  .lb { width:min(420px,86vw); max-height:46vh; overflow:auto; background:#0c1f14;
+    border:2px solid #2c6b3f; border-radius:14px; padding:6px 4px; }
+  .lb .row { display:flex; align-items:center; gap:10px; padding:7px 12px; font-size:15px; border-radius:8px; }
+  .lb .row:nth-child(odd) { background:rgba(255,255,255,.03); }
+  .lb .row.me { background:rgba(124,252,155,.16); }
+  .lb .rk { width:30px; color:var(--accent); font-weight:800; text-align:right; }
+  .lb .nm { flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lb .sc { font-weight:800; font-variant-numeric:tabular-nums; }
+  .lbtag { font-size:11px; opacity:.5; }
+  .rowbtns { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
 </style>
 </head>
 <body>
@@ -51,8 +65,17 @@
       <span class="pill">P: 一時停止</span>
       <span class="pill">M: 消音</span>
     </div>
-    <button id="startBtn">▶ ゲーム開始</button>
+    <div class="rowbtns">
+      <button id="startBtn">▶ ゲーム開始</button>
+      <button id="rankBtn" class="btn2">🏆 ランキング</button>
+    </div>
     <div class="hint" id="bestHint"></div>
+  </div>
+
+  <div id="ranking" class="overlay hidden">
+    <h1 style="font-size:clamp(24px,5vw,40px)">🏆 RANKING <span id="lbScope" class="lbtag"></span></h1>
+    <div class="lb" id="rankList"></div>
+    <button id="rankClose" class="btn2">閉じる</button>
   </div>
 
   <div id="levelup" class="overlay hidden">
@@ -64,6 +87,14 @@
   <div id="gameover" class="overlay hidden">
     <h1 style="color:#ff7b7b">GAME OVER</h1>
     <div class="sub" id="goStats"></div>
+    <div id="submitRow">
+      <div class="sub" style="margin-bottom:8px">名前を入れてランキング登録</div>
+      <div class="rowbtns">
+        <input id="nameInput" class="name" maxlength="12" placeholder="YOU" />
+        <button id="submitScore" class="btn2">登録</button>
+      </div>
+    </div>
+    <div class="lb" id="goLbList"></div>
     <button id="retryBtn">↻ もう一度</button>
   </div>
 </div>
@@ -95,6 +126,30 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx*dx + dy*dy; };
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const TAU = Math.PI * 2;
+
+// ---- online leaderboard ----
+// Set LB_ENDPOINT to your deployed worker URL (see leaderboard-worker.js) to
+// enable global online ranking. Leave "" for offline (localStorage) ranking.
+const LB_ENDPOINT = "";
+const Leaderboard = {
+  online() { return !!LB_ENDPOINT; },
+  _local() { try { return JSON.parse(localStorage.getItem("cs_lb") || "[]"); } catch (e) { return []; } },
+  async top() {
+    if (this.online()) {
+      try { const r = await fetch(LB_ENDPOINT + "/top", { cache:"no-store" }); if (r.ok) return await r.json(); } catch (e) {}
+    }
+    return this._local();
+  },
+  async submit(name, score) {
+    const entry = { name: (name || "YOU").slice(0, 12), score, t: Date.now() };
+    const l = this._local(); l.push(entry); l.sort((a, b) => b.score - a.score);
+    localStorage.setItem("cs_lb", JSON.stringify(l.slice(0, 50)));
+    if (this.online()) {
+      try { await fetch(LB_ENDPOINT + "/submit", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(entry) }); } catch (e) {}
+    }
+    return this.top();
+  },
+};
 
 // ---- input ----
 const keys = {};
@@ -233,6 +288,9 @@ function newGame() {
     spawnTimer: 0,
     chestTimer: 14,
     boss: null,              // current live boss (for HP bar)
+    cutin: null,             // boss intro cut-in { name, bossImg, t, max }
+    endlessTimer: 180,       // after the last boss, a stronger boss every 3 min
+    endlessCount: 0,
     bossQueue: [             // timed boss appearances (one-shot)
       { bossImg:"oni",   shape:"oni",    name:"鬼",     time:180, hp:1800, r:58, speed:152, dmg:34, xp:120, breathDmg:26, breathCol:"255,120,40", done:false },
       { bossImg:"zonbi", shape:"zombie", name:"ゾンビ", time:480, hp:7000, r:72, speed:138, dmg:50, xp:300, breathDmg:38, breathCol:"150,230,90", done:false },
@@ -345,14 +403,15 @@ function killEnemy(e) {
 }
 function spawnBoss(cfg) {
   const p = game.player;
-  const ang = Math.random() * TAU, d = Math.max(W, H) * 0.6 + 100;
+  const ang = Math.random() * TAU, d = rand(220, 320);   // spawn near the player
   const e = { type:cfg.shape, boss:true, bossImg:cfg.bossImg, name:cfg.name,
     x:p.x + Math.cos(ang)*d, y:p.y + Math.sin(ang)*d,
     r:cfg.r, hp:cfg.hp, maxhp:cfg.hp, speed:cfg.speed, dmg:cfg.dmg, xp:cfg.xp, dir:"front",
     breathDmg:cfg.breathDmg, breathCol:cfg.breathCol, atkCd:4, breath:null,
     color: cfg.shape === "oni" ? "#d23b2e" : "#6fae57", wob:false, hit:0, phase:0, kx:0, ky:0 };
   game.enemies.push(e); game.boss = e;
-  banner(`⚠ ${cfg.name} 出現！`); Audio.boom(); game.shake = 14;
+  game.cutin = { name:cfg.name, bossImg:cfg.bossImg, t:1.8, max:1.8 };   // intro cut-in
+  Audio.boom(); game.shake = 14;
 }
 function bossReward(e) {
   if (game.boss === e) game.boss = null;
@@ -561,6 +620,20 @@ function update(dt) {
   // ---- bosses (timed, one-shot) ----
   for (const bq of game.bossQueue)
     if (!bq.done && game.time >= bq.time) { bq.done = true; spawnBoss(bq); }
+  // endless: after the last scheduled boss, a +25% stronger boss every 3 min
+  if (game.bossQueue[game.bossQueue.length - 1].done) {
+    game.endlessTimer -= dt;
+    if (game.endlessTimer <= 0) {
+      game.endlessCount++;
+      const base = game.bossQueue[game.endlessCount % game.bossQueue.length];
+      const m = Math.pow(1.25, game.endlessCount);
+      spawnBoss({ bossImg:base.bossImg, shape:base.shape, name:`${base.name} +${game.endlessCount}`,
+        r:base.r, speed: base.speed * (1 + 0.04*game.endlessCount),
+        hp: Math.round(base.hp*m), dmg: Math.round(base.dmg*m), xp: Math.round(base.xp*m),
+        breathDmg: Math.round(base.breathDmg*m), breathCol: base.breathCol });
+      game.endlessTimer = 180;
+    }
+  }
   if (game.boss && game.boss.dead) game.boss = null;
 
   // ---- chests ----
@@ -1099,6 +1172,7 @@ function render() {
   }
 
   drawHUD();
+  if (game.cutin) drawCutin();
 
   if (game.paused) {
     ctx.fillStyle = "rgba(8,18,12,.6)"; ctx.fillRect(0, 0, W, H);
@@ -1107,6 +1181,41 @@ function render() {
     ctx.font = "14px sans-serif"; ctx.fillStyle = "#eafff0";
     ctx.fillText("P で再開", W/2, H/2 + 32);
   }
+}
+
+// dramatic boss intro cut-in
+function drawCutin() {
+  const c = game.cutin, prog = 1 - c.t / c.max;       // 0..1
+  const slide = prog < 0.25 ? prog / 0.25 : 1;         // ease in
+  const out = prog > 0.8 ? (prog - 0.8) / 0.2 : 0;     // fade/slide out
+  const barH = H * 0.27 * (slide - out);
+  // letterbox bars
+  ctx.fillStyle = "#06120b"; ctx.fillRect(0, 0, W, barH); ctx.fillRect(0, H - barH, W, barH);
+  // red diagonal sweep band across the middle
+  const bandY = H/2, bh = 96;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, bandY - bh/2, W, bh); ctx.clip();
+  ctx.fillStyle = "rgba(120,10,10,.85)"; ctx.fillRect(0, bandY - bh/2, W, bh);
+  for (let i = -2; i < W/40 + 2; i++) { ctx.fillStyle = "rgba(255,80,40,.18)";
+    const x = (i*40 + (game.time*120 % 80)); ctx.beginPath();
+    ctx.moveTo(x, bandY - bh/2); ctx.lineTo(x+20, bandY - bh/2); ctx.lineTo(x-20, bandY + bh/2); ctx.lineTo(x-40, bandY + bh/2); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  // boss portrait sliding in from the right
+  const im = BOSS_IMG[c.bossImg] && BOSS_IMG[c.bossImg].front;
+  if (im && im.complete && im.naturalHeight) {
+    const h = Math.min(H*0.5, 280), w = im.naturalWidth * (h/im.naturalHeight);
+    const x = W*0.66 + (1 - slide) * W*0.5 + out * W*0.5;
+    ctx.globalAlpha = 1 - out; ctx.drawImage(im, x - w/2, bandY - h*0.62, w, h); ctx.globalAlpha = 1;
+  }
+  // WARNING + name text
+  ctx.textAlign = "center";
+  ctx.fillStyle = `rgba(255,210,75,${0.6 + 0.4*Math.sin(game.time*14)})`;
+  ctx.font = "bold 22px sans-serif"; ctx.fillText("⚠ WARNING ⚠", W/2, bandY - 24);
+  const nx = W*0.34 - (1 - slide) * W*0.4 - out * W*0.4;
+  ctx.fillStyle = "#fff"; ctx.font = "900 44px sans-serif";
+  ctx.shadowColor = "#d23b2e"; ctx.shadowBlur = 18;
+  ctx.fillText(c.name, nx, bandY + 16); ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.font = "bold 14px sans-serif";
+  ctx.fillText("BOSS APPROACHING", nx, bandY + 40);
 }
 
 function drawGrid(camx, camy, color) {
@@ -1272,13 +1381,37 @@ function start() {
 }
 function gameOver() {
   game.state = "over";
-  const best = Math.max(Number(localStorage.getItem("cs_best")||0), Math.floor(game.time));
-  localStorage.setItem("cs_best", best);
-  const m = Math.floor(game.time/60), s = Math.floor(game.time%60);
+  const score = Math.floor(game.time) * 10 + game.kills;   // time(s)×10 + kills
+  game._score = score;
+  const best = Math.max(Number(localStorage.getItem("cs_bestscore")||0), score);
+  localStorage.setItem("cs_bestscore", best);
+  const m = Math.floor(game.time/60), s = (Math.floor(game.time%60)+"").padStart(2,"0");
   el("goStats").innerHTML =
-    `生存 <b>${m}:${s.toString().padStart(2,"0")}</b> ／ 撃破 <b>${game.kills}</b> ／ Lv.<b>${game.level}</b><br>` +
-    `<span class="pill">自己ベスト: ${Math.floor(best/60)}:${(best%60).toString().padStart(2,"0")}</span>`;
+    `スコア <b style="color:var(--accent);font-size:1.5em">${score.toLocaleString()}</b><br>` +
+    `生存 <b>${m}:${s}</b> ／ 撃破 <b>${game.kills}</b> ／ Lv.<b>${game.level}</b>` +
+    (game.endlessCount ? ` ／ 周回 <b>${game.endlessCount}</b>` : "") + `<br>` +
+    `<span class="pill">自己ベスト: ${best.toLocaleString()}</span>`;
+  el("nameInput").value = localStorage.getItem("cs_name") || "";
+  el("submitScore").disabled = false; el("submitScore").textContent = "登録";
+  el("submitRow").style.display = "";
+  showLb(el("goLbList"), null);
   show("gameover");
+}
+function esc(s) { return String(s).replace(/[<>&]/g, c => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c])); }
+function lbRows(list, hl) {
+  let done = false;
+  const rows = list.slice(0, 20).map((e, i) => {
+    let me = "";
+    if (hl && !done && e.name === hl.name && e.score === hl.score) { me = " me"; done = true; }
+    const medal = i < 3 ? ["🥇","🥈","🥉"][i] : (i+1);
+    return `<div class="row${me}"><span class="rk">${medal}</span><span class="nm">${esc(e.name||"???")}</span><span class="sc">${(e.score||0).toLocaleString()}</span></div>`;
+  }).join("");
+  return rows || `<div class="row"><span class="nm" style="opacity:.6">まだ記録がありません</span></div>`;
+}
+async function showLb(elem, hl) {
+  elem.innerHTML = `<div class="row"><span class="nm" style="opacity:.6">読み込み中…</span></div>`;
+  const list = await Leaderboard.top();
+  elem.innerHTML = lbRows(list, hl);
 }
 // generic 3-choice picker, shared by level-up and chests
 function showChoices(title, sub, items, renderFn, onPick) {
@@ -1311,9 +1444,18 @@ function openLevelUp() {
 
 el("startBtn").onclick = start;
 el("retryBtn").onclick = start;
-const best = Number(localStorage.getItem("cs_best")||0);
-if (best > 0) el("bestHint").textContent =
-  `自己ベスト: ${Math.floor(best/60)}:${(best%60).toString().padStart(2,"0")}`;
+el("rankBtn").onclick = () => { el("lbScope").textContent = Leaderboard.online() ? "(オンライン)" : "(ローカル)"; showLb(el("rankList"), null); hide("title"); show("ranking"); };
+el("rankClose").onclick = () => { hide("ranking"); show("title"); };
+el("submitScore").onclick = async () => {
+  const name = (el("nameInput").value || "").trim() || "YOU";
+  localStorage.setItem("cs_name", name);
+  el("submitScore").disabled = true; el("submitScore").textContent = "登録中…";
+  const list = await Leaderboard.submit(name, game._score);
+  el("goLbList").innerHTML = lbRows(list, { name, score: game._score });
+  el("submitRow").style.display = "none";
+};
+const bestScore = Number(localStorage.getItem("cs_bestscore")||0);
+if (bestScore > 0) el("bestHint").textContent = `自己ベスト: ${bestScore.toLocaleString()}`;
 
 // keyboard: number keys to pick a choice
 addEventListener("keydown", e => {
@@ -1332,7 +1474,8 @@ function loop(now) {
   let dt = (now - last) / 1000; last = now;
   dt = Math.min(dt, 1/20); // clamp big frame gaps
   if (game && game.state === "play" && !game.paused) {
-    if (game.hitstop > 0) game.hitstop -= dt;   // freeze sim, keep rendering
+    if (game.cutin) { game.cutin.t -= dt; if (game.cutin.t <= 0) game.cutin = null; } // freeze for boss intro
+    else if (game.hitstop > 0) game.hitstop -= dt;   // freeze sim, keep rendering
     else update(dt);
   }
   if (game) render();
