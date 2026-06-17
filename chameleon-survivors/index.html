@@ -182,10 +182,15 @@ const Audio = (() => {
 // ============================================================
 //  Game state
 // ============================================================
-// directional character art (official sprites)
+// directional character art (official sprites): 8 dirs, idle + 2 walk frames
+const DIRS = ["front","back","left","right","downleft","downright","upleft","upright"];
+const DIRS8 = ["right","downright","front","downleft","left","upleft","back","upright"]; // by octant
 const CHAR = {};
-for (const dir of ["front", "back", "left", "right"]) {
-  const im = new Image(); im.src = "assets/char_" + dir + ".png"; CHAR[dir] = im;
+for (const d of DIRS) {
+  const idle = new Image(); idle.src = "assets/char_" + d + ".png";
+  const w0 = new Image(); w0.src = "assets/char_" + d + "_w0.png";
+  const w1 = new Image(); w1.src = "assets/char_" + d + "_w1.png";
+  CHAR[d] = { idle, walk: [w0, w1] };
 }
 let game;
 function newGame() {
@@ -197,7 +202,7 @@ function newGame() {
     cam: { x:0, y:0 },
     player: {
       x:0, y:0, r:18, speed:185, hp:100, maxhp:100,
-      facing:{x:1,y:0}, dir:"front",
+      facing:{x:1,y:0}, dir:"front", moving:false, walkT:0,
       iframe:0,
       // weapon: tongue
       tongueCd:0, tongueRate:0.7, tongueRange:240, tongueDmg:14, tongueWidth:14,
@@ -470,15 +475,17 @@ function update(dt) {
     if (Math.hypot(wx, wy) > 18) { mx = wx; my = wy; }
   }
   const ml = Math.hypot(mx, my);
+  p.moving = ml > 0;
   if (ml > 0) {
     mx /= ml; my /= ml;
     const sp = p.speed * p.mods.speed;
     p.x += mx * sp * dt; p.y += my * sp * dt;
     p.facing.x = mx; p.facing.y = my;
-    // 4-directional sprite selection (down=front, up=back)
-    if (Math.abs(mx) > Math.abs(my)) p.dir = mx < 0 ? "left" : "right";
-    else p.dir = my < 0 ? "back" : "front";
+    // 8-directional sprite selection by movement octant
+    const a = Math.atan2(my, mx);
+    p.dir = DIRS8[((Math.round(a / (Math.PI/4)) % 8) + 8) % 8];
   }
+  if (p.moving) p.walkT += dt; else p.walkT = 0;
 
   // ---- camera ----
   game.cam.x += (p.x - game.cam.x) * Math.min(1, dt*8);
@@ -1026,7 +1033,12 @@ function drawPlayer() {
   groundShadow(p.x, p.y + p.r*0.95*sz, p.r*sz*0.85);
   ctx.save();
   if (p.iframe > 0 && Math.floor(p.iframe*20) % 2) ctx.globalAlpha = 0.5;
-  const img = CHAR[p.dir];
+  const C = CHAR[p.dir] || CHAR.front;
+  let img = C.idle;
+  if (p.moving) {                            // walk cycle (~7.7 fps)
+    const f = C.walk[Math.floor(p.walkT / 0.13) % C.walk.length];
+    if (f && f.complete && f.naturalHeight) img = f;
+  }
   if (img && img.complete && img.naturalHeight) {
     const targetH = p.r * 3.1 * sz * chomp;
     const s = targetH / img.naturalHeight;
