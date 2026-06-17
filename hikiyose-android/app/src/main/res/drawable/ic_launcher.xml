@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Purple full-bleed background -->
+    <path
+        android:fillColor="#6750A4"
+        android:pathData="M0,0 h108 v108 h-108 z" />
+    <!-- A "spark / shooting star" to evoke attraction (引き寄せ) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28 L59,49 L80,54 L59,59 L54,80 L49,59 L28,54 L49,49 Z" />
+    <path
+        android:fillColor="#FFE9B949"
+        android:pathData="M74,34 L76,41 L83,43 L76,45 L74,52 L72,45 L65,43 L72,41 Z" />
+</vector>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">引き寄せノート</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">ホーム</string>
+    <string name="nav_journal">ジャーナル</string>
+    <string name="nav_affirmation">アファメーション</string>
+    <string name="nav_templates">書式</string>
+</resources>
