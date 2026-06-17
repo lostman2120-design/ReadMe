@@ -192,6 +192,9 @@ for (const d of DIRS) {
   const w1 = new Image(); w1.src = "assets/char_" + d + "_w1.png";
   CHAR[d] = { idle, walk: [w0, w1] };
 }
+// boss art (optional): falls back to code-drawn sprite until uploaded
+const BOSS_IMG = {};
+for (const b of ["oni", "zonbi"]) { const im = new Image(); im.src = "assets/boss_" + b + ".png"; BOSS_IMG[b] = im; }
 let game;
 function newGame() {
   return {
@@ -226,6 +229,11 @@ function newGame() {
     kills: 0,
     spawnTimer: 0,
     chestTimer: 14,
+    boss: null,              // current live boss (for HP bar)
+    bossQueue: [             // timed boss appearances (one-shot)
+      { bossImg:"oni",   shape:"oni",    name:"鬼",     time:180, hp:1800, r:58, speed:44, dmg:34, xp:120, done:false },
+      { bossImg:"zonbi", shape:"zombie", name:"ゾンビ", time:480, hp:7000, r:72, speed:38, dmg:50, xp:300, done:false },
+    ],
     banner: null,            // { text, t }
     flash: 0,                // white screen flash (nuke)
     biome: pickBiome(),
@@ -325,11 +333,33 @@ function damageEnemy(e, dmg, kx, ky) {
 function killEnemy(e) {
   e.dead = true; game.kills++;
   Audio.kill();
+  if (e.boss) { bossReward(e); return; }
   // leave an edible morsel that gets sucked into the chameleon's mouth
   game.food.push({ x:e.x, y:e.y, type:e.type, xp:e.xp, r:e.r*0.7, t:0, delay:rand(0,0.08) });
   for (let i = 0; i < 6; i++)
     game.particles.push({ x:e.x, y:e.y, vx:rand(-100,100), vy:rand(-100,100),
       t:rand(.2,.45), c:e.color, r:rand(1.5,3) });
+}
+function spawnBoss(cfg) {
+  const p = game.player;
+  const ang = Math.random() * TAU, d = Math.max(W, H) * 0.6 + 100;
+  const e = { type:cfg.shape, boss:true, bossImg:cfg.bossImg, name:cfg.name,
+    x:p.x + Math.cos(ang)*d, y:p.y + Math.sin(ang)*d,
+    r:cfg.r, hp:cfg.hp, maxhp:cfg.hp, speed:cfg.speed, dmg:cfg.dmg, xp:cfg.xp,
+    color: cfg.shape === "oni" ? "#d23b2e" : "#6fae57", wob:false, hit:0, phase:0, kx:0, ky:0 };
+  game.enemies.push(e); game.boss = e;
+  banner(`⚠ ${cfg.name} 出現！`); Audio.boom(); game.shake = 14;
+}
+function bossReward(e) {
+  if (game.boss === e) game.boss = null;
+  banner(`★ ${e.name} 撃破！★`);
+  game.shake = 18; game.flash = 0.45; Audio.levelup();
+  const chunk = Math.max(2, Math.round(e.xp / 24));
+  for (let i = 0; i < 24; i++)
+    game.food.push({ x:e.x + rand(-50,50), y:e.y + rand(-50,50), type:e.type, xp:chunk, r:e.r*0.16, t:0, delay:rand(0,0.6) });
+  for (let i = 0; i < 30; i++)
+    game.particles.push({ x:e.x, y:e.y, vx:rand(-220,220), vy:rand(-220,220), t:rand(.4,.9), c:e.color, r:rand(2,4.5) });
+  game.chests.push({ x:e.x, y:e.y, r:16, bob:0 });
 }
 // chameleon mouth position (front of facing direction)
 function mouthPos() {
@@ -517,6 +547,11 @@ function update(dt) {
     game.spawnTimer = spawnInterval;
   }
 
+  // ---- bosses (timed, one-shot) ----
+  for (const bq of game.bossQueue)
+    if (!bq.done && game.time >= bq.time) { bq.done = true; spawnBoss(bq); }
+  if (game.boss && game.boss.dead) game.boss = null;
+
   // ---- chests ----
   game.chestTimer -= dt;
   if (game.chestTimer <= 0 && game.chests.length < 2) { spawnChest(); game.chestTimer = 22; }
@@ -566,7 +601,9 @@ function update(dt) {
       if (d2 < rr*rr && d2 > 0.01) {
         const d = Math.sqrt(d2); const push = (rr - d) * 0.5;
         const nx = dx/d, ny = dy/d;
-        a.x -= nx*push; a.y -= ny*push; b.x += nx*push; b.y += ny*push;
+        if (a.boss && !b.boss) { b.x += nx*push*2; b.y += ny*push*2; }        // bosses don't get shoved
+        else if (b.boss && !a.boss) { a.x -= nx*push*2; a.y -= ny*push*2; }
+        else { a.x -= nx*push; a.y -= ny*push; b.x += nx*push; b.y += ny*push; }
       }
     }
   }
@@ -634,12 +671,14 @@ function buildSprites() {
   PLAYER_SPRITE = mkCanvas(44, 66);
   drawGirl(PLAYER_SPRITE.getContext("2d"));
 
-  // ---- enemies: distinct silhouettes per shape ----
-  for (const [type, base] of Object.entries(ENEMY_TYPES)) {
+  // ---- enemies: distinct silhouettes per shape (+ oni boss fallback) ----
+  const shapes = Object.entries(ENEMY_TYPES).map(([t,b]) => [t, b.shape, b.color]);
+  shapes.push(["oni", "oni", "#d23b2e"]);
+  for (const [type, shape, color] of shapes) {
     const cv2 = mkCanvas(ENEMY_CS, ENEMY_CS); ENEMY_SPRITES[type] = cv2;
     const g2 = cv2.getContext("2d");
     g2.translate(ENEMY_CS/2, ENEMY_CS/2);    // center origin
-    drawCreature(g2, base.shape, base.color, ENEMY_BR);
+    drawCreature(g2, shape, color, ENEMY_BR);
   }
 
   // ---- gear: baked at player-sprite resolution so it matches the pixel look ----
@@ -795,6 +834,17 @@ function drawCreature(g, shape, color, R) {
     g.moveTo(3, -6); g.lineTo(8, -1); g.moveTo(8, -6); g.lineTo(3, -1); g.stroke();
     g.beginPath(); g.moveTo(-5, 7); g.lineTo(5, 7);
     g.moveTo(-3, 6); g.lineTo(-3, 8); g.moveTo(0, 6); g.lineTo(0, 8); g.moveTo(3, 6); g.lineTo(3, 8); g.stroke();
+  } else if (shape === "oni") {            // boss fallback: red horned demon
+    g.fillStyle = "#f3e1b0";
+    g.beginPath(); g.moveTo(-R*0.7,-R*0.4); g.quadraticCurveTo(-R*1.15,-R*1.35,-R*0.45,-R*1.1); g.quadraticCurveTo(-R*0.6,-R*0.6,-R*0.45,-R*0.5); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(R*0.7,-R*0.4); g.quadraticCurveTo(R*1.15,-R*1.35,R*0.45,-R*1.1); g.quadraticCurveTo(R*0.6,-R*0.6,R*0.45,-R*0.5); g.closePath(); g.fill();
+    sphere(g, 0, 0, R, color);
+    g.strokeStyle = "#3a0d0d"; g.lineWidth = 2.5; g.lineCap = "round";
+    g.beginPath(); g.moveTo(-R*0.62,-R*0.28); g.lineTo(-R*0.14,-R*0.05); g.moveTo(R*0.62,-R*0.28); g.lineTo(R*0.14,-R*0.05); g.stroke();
+    g.fillStyle = "#ffd24b"; ell(g,-R*0.3,R*0.04,R*0.17,R*0.21); ell(g,R*0.3,R*0.04,R*0.17,R*0.21);
+    g.fillStyle = "#3a0d0d"; ell(g,-R*0.3,R*0.07,R*0.07,R*0.11); ell(g,R*0.3,R*0.07,R*0.07,R*0.11);
+    g.fillStyle = "#3a0d0d"; g.beginPath(); g.ellipse(0,R*0.46,R*0.36,R*0.2,0,0,TAU); g.fill();
+    g.fillStyle = "#fff"; tri(g,-R*0.24,R*0.34,-R*0.12,R*0.34,-R*0.18,R*0.6); tri(g,R*0.24,R*0.34,R*0.12,R*0.34,R*0.18,R*0.6);
   } else { // tank (spiked boss bug)
     g.fillStyle = shade(color, 0.6);
     for (let i = 0; i < 10; i++) { const a = i/10*TAU, c = Math.cos(a), s = Math.sin(a);
@@ -1016,6 +1066,20 @@ function drawGrid(camx, camy, color) {
 function drawEnemy(e) {
   const bob = e.wob ? Math.sin(e.phase)*2 : 0;
   groundShadow(e.x, e.y + e.r*0.4, e.r);
+  if (e.boss) {
+    const im = BOSS_IMG[e.bossImg];
+    if (im && im.complete && im.naturalHeight) {     // uploaded boss art
+      const s = (e.r * 3.0) / im.naturalHeight, w = im.naturalWidth*s, h = im.naturalHeight*s;
+      const prev = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(im, e.x - w/2, e.y + e.r*0.9 - h + bob, w, h);
+      ctx.imageSmoothingEnabled = prev;
+    } else {                                          // code-drawn fallback
+      blit(ENEMY_SPRITES[e.type] || ENEMY_SPRITES.tank, e.x, e.y + bob, e.r / ENEMY_BR, false);
+    }
+    if (e.hit > 0) { ctx.globalAlpha = clamp(e.hit/0.12,0,1)*0.7; ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(e.x, e.y + bob, e.r, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+    return;                                           // boss HP shown by the top bar
+  }
   const spr = ENEMY_SPRITES[e.type];
   blit(spr, e.x, e.y + bob, e.r / ENEMY_BR, false);
   if (e.hit > 0) {                          // white hit flash
@@ -1123,6 +1187,16 @@ function drawHUD() {
   ctx.font = "16px sans-serif";
   const gear = [p.equip.head, p.equip.body].filter(Boolean).map(it => it.ico).join(" ");
   if (gear) ctx.fillText(gear, W - 14, 64);
+  // boss HP bar (top center)
+  const b = game.boss;
+  if (b && !b.dead) {
+    const bw = Math.min(W - 80, 520), bx = (W - bw)/2, by = 56;
+    ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(bx, by, bw, 14);
+    ctx.fillStyle = "#d23b2e"; ctx.fillRect(bx, by, bw * clamp(b.hp/b.maxhp, 0, 1), 14);
+    ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, 14);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(`☠ BOSS  ${b.name}`, W/2, by - 3);
+  }
 }
 
 // ============================================================
