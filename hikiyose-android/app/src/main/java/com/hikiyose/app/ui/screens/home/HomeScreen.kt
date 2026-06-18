@@ -1,171 +1,112 @@
 package com.hikiyose.app.ui.screens.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.hikiyose.app.data.entity.TodoItem
-import com.hikiyose.app.ui.components.SectionCard
+import com.hikiyose.app.data.Method
+import com.hikiyose.app.data.MethodsData
 import com.hikiyose.app.ui.hikiyoseViewModel
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
+/**
+ * Wireframe ① : left-hand tabs to pick a 〇〇式, right pane shows that method's
+ * column (how-to of that manifestation method).
+ */
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = hikiyoseViewModel()) {
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val selectedId by viewModel.selectedMethodId.collectAsStateWithLifecycle()
+    val method = MethodsData.byId(selectedId)
 
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item { Header() }
+    Row(Modifier.fillMaxSize()) {
+        MethodTabs(
+            selectedId = selectedId,
+            onSelect = viewModel::select,
+            modifier = Modifier
+                .width(108.dp)
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        )
+        MethodColumn(
+            method = method,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+        )
+    }
+}
 
-        item {
-            SectionCard(title = "今日のアファメーション") {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = state.affirmationOfDay?.text
-                        ?: "「アファメーション」タブで、あなたの言葉を追加しましょう。",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-
-        item {
-            SectionCard(title = "偉人の言葉") {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "“${state.quoteOfDay.text}”",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontStyle = FontStyle.Italic,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "— ${state.quoteOfDay.author}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.End),
-                )
-            }
-        }
-
-        item {
-            TodoCard(
-                todos = state.todos,
-                onAdd = viewModel::addTodo,
-                onToggle = viewModel::toggleTodo,
-                onDelete = viewModel::deleteTodo,
+@Composable
+private fun MethodTabs(
+    selectedId: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.padding(vertical = 12.dp)) {
+        MethodsData.all.forEach { method ->
+            val selected = method.id == selectedId
+            Text(
+                text = method.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.primaryContainer
+                        else androidx.compose.ui.graphics.Color.Transparent
+                    )
+                    .clickable { onSelect(method.id) }
+                    .padding(horizontal = 10.dp, vertical = 12.dp),
             )
         }
     }
 }
 
 @Composable
-private fun Header() {
-    val today = LocalDate.now()
-    val formatter = DateTimeFormatter.ofPattern("M月d日 (E)", Locale.JAPANESE)
-    Column {
+private fun MethodColumn(method: Method, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(method.name, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(4.dp))
         Text(
-            text = today.format(formatter),
-            style = MaterialTheme.typography.labelLarge,
+            method.summary,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Spacer(Modifier.height(12.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(12.dp))
         Text(
-            text = "今日もいい一日にしよう",
-            style = MaterialTheme.typography.titleLarge,
-        )
-    }
-}
-
-@Composable
-private fun TodoCard(
-    todos: List<TodoItem>,
-    onAdd: (String) -> Unit,
-    onToggle: (TodoItem) -> Unit,
-    onDelete: (TodoItem) -> Unit,
-) {
-    var input by remember { mutableStateOf("") }
-    SectionCard(title = "TO DO") {
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                placeholder = { Text("やることを追加") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = {
-                onAdd(input)
-                input = ""
-            }) {
-                Icon(Icons.Filled.Add, contentDescription = "追加")
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        if (todos.isEmpty()) {
-            Text(
-                text = "まだタスクがありません。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-        } else {
-            todos.forEach { todo ->
-                TodoRow(todo, onToggle, onDelete)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TodoRow(
-    todo: TodoItem,
-    onToggle: (TodoItem) -> Unit,
-    onDelete: (TodoItem) -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = todo.isDone, onCheckedChange = { onToggle(todo) })
-        Text(
-            text = todo.title,
+            method.body,
             style = MaterialTheme.typography.bodyLarge,
-            textDecoration = if (todo.isDone) TextDecoration.LineThrough else null,
-            color = if (todo.isDone) {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-            modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = { onDelete(todo) }) {
-            Icon(Icons.Filled.Delete, contentDescription = "削除")
-        }
+        Spacer(Modifier.height(24.dp))
     }
 }

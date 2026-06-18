@@ -5,19 +5,21 @@ import androidx.room.PrimaryKey
 import java.time.LocalDate
 
 /**
- * A single journaling entry tied to a calendar date.
- * Wireframe ③ : 日付・今日の出来事に感謝・本文。書式(templateId)で見出し構成が変わる。
+ * A daily journal entry tied to a calendar date (wireframe ③).
  *
- * [date] is stored as epoch-day (Long) for easy ordering and one-entry-per-day lookup.
+ * - [idealDay]  : 「今日はどんな日になれば最高？」への答え
+ * - [body]      : 中央のリスト形式メモ
+ * - [goodThings]: 「今日よかった・嬉しかったこと」
+ *
+ * [dateEpochDay] is stored as epoch-day for ordering and one-entry-per-day lookup.
  */
 @Entity(tableName = "journal_entries")
 data class JournalEntry(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val dateEpochDay: Long,
-    val templateId: String,
-    val gratitude: String = "",
+    val idealDay: String = "",
     val body: String = "",
-    val mood: Int = 0,
+    val goodThings: String = "",
     val updatedAt: Long = System.currentTimeMillis(),
 ) {
     val date: LocalDate get() = LocalDate.ofEpochDay(dateEpochDay)

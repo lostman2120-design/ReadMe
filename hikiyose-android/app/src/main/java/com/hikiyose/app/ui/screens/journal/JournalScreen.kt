@@ -40,8 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.hikiyose.app.data.JournalTemplate
 import com.hikiyose.app.data.entity.JournalEntry
+import com.hikiyose.app.data.entity.Manifestation
 import com.hikiyose.app.ui.components.SectionCard
 import com.hikiyose.app.ui.hikiyoseViewModel
 import java.time.LocalDate
@@ -53,9 +53,9 @@ import java.util.Locale
 fun JournalScreen(viewModel: JournalViewModel = hikiyoseViewModel()) {
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val entryDates by viewModel.entryDates.collectAsStateWithLifecycle()
-    val template by viewModel.selectedTemplate.collectAsStateWithLifecycle()
     val currentEntry by viewModel.currentEntry.collectAsStateWithLifecycle()
     val entries by viewModel.entries.collectAsStateWithLifecycle()
+    val manifestations by viewModel.manifestations.collectAsStateWithLifecycle()
 
     var visibleMonth by remember { mutableStateOf(YearMonth.from(selectedDate)) }
 
@@ -64,6 +64,8 @@ fun JournalScreen(viewModel: JournalViewModel = hikiyoseViewModel()) {
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item { ManifestationsHeader(manifestations) }
+
         item {
             SectionCard(title = "カレンダー") {
                 Spacer(Modifier.height(8.dp))
@@ -81,18 +83,33 @@ fun JournalScreen(viewModel: JournalViewModel = hikiyoseViewModel()) {
         item {
             JournalEditor(
                 date = selectedDate,
-                template = template,
                 entry = currentEntry,
                 onSave = viewModel::save,
             )
         }
 
         if (entries.isNotEmpty()) {
-            item {
-                Text("これまでの記録", style = MaterialTheme.typography.titleMedium)
-            }
+            item { Text("これまでの記録", style = MaterialTheme.typography.titleMedium) }
             items(entries, key = { it.id }) { entry ->
                 EntryRow(entry = entry, onClick = { viewModel.selectDate(entry.date) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun ManifestationsHeader(manifestations: List<Manifestation>) {
+    SectionCard(title = "引き寄せること") {
+        Spacer(Modifier.height(8.dp))
+        if (manifestations.isEmpty()) {
+            Text(
+                "「記入」タブで引き寄せたいことを登録しましょう。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            manifestations.forEach { m ->
+                Text("・${m.text}", style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
@@ -115,13 +132,9 @@ private fun MonthCalendar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onPrev) {
-            Icon(Icons.Filled.ChevronLeft, contentDescription = "前の月")
-        }
+        IconButton(onClick = onPrev) { Icon(Icons.Filled.ChevronLeft, contentDescription = "前の月") }
         Text(month.format(monthFormatter), style = MaterialTheme.typography.titleMedium)
-        IconButton(onClick = onNext) {
-            Icon(Icons.Filled.ChevronRight, contentDescription = "次の月")
-        }
+        IconButton(onClick = onNext) { Icon(Icons.Filled.ChevronRight, contentDescription = "次の月") }
     }
 
     Row(Modifier.fillMaxWidth()) {
@@ -136,20 +149,16 @@ private fun MonthCalendar(
         }
     }
 
-    // Build the grid: leading blanks for the first week, then each day of the month.
     val firstDay = month.atDay(1)
-    // DayOfWeek: MON=1..SUN=7 -> convert so SUN=0.
-    val leadingBlanks = firstDay.dayOfWeek.value % 7
+    val leadingBlanks = firstDay.dayOfWeek.value % 7 // SUN=0
     val daysInMonth = month.lengthOfMonth()
-    val cells = leadingBlanks + daysInMonth
-    val rows = (cells + 6) / 7
+    val rows = (leadingBlanks + daysInMonth + 6) / 7
 
     Column {
         for (row in 0 until rows) {
             Row(Modifier.fillMaxWidth()) {
                 for (col in 0 until 7) {
-                    val cellIndex = row * 7 + col
-                    val dayNumber = cellIndex - leadingBlanks + 1
+                    val dayNumber = row * 7 + col - leadingBlanks + 1
                     if (dayNumber in 1..daysInMonth) {
                         val date = month.atDay(dayNumber)
                         DayCell(
@@ -196,17 +205,13 @@ private fun DayCell(
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = day.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                    color = when {
-                        isSelected -> MaterialTheme.colorScheme.onPrimary
-                        else -> MaterialTheme.colorScheme.onSurface
-                    },
-                )
-            }
+            Text(
+                text = day.toString(),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.onSurface,
+            )
         }
         if (hasEntry && !isSelected) {
             Box(
@@ -223,52 +228,47 @@ private fun DayCell(
 @Composable
 private fun JournalEditor(
     date: LocalDate,
-    template: JournalTemplate,
     entry: JournalEntry?,
-    onSave: (gratitude: String, body: String) -> Unit,
+    onSave: (idealDay: String, body: String, goodThings: String) -> Unit,
 ) {
-    var gratitude by remember(date, entry?.id) { mutableStateOf(entry?.gratitude ?: "") }
-    var body by remember(date, entry?.id) { mutableStateOf(entry?.body ?: "") }
-    var saved by remember(date, entry?.id) { mutableStateOf(false) }
+    var idealDay by remember(entry?.id) { mutableStateOf(entry?.idealDay ?: "") }
+    var body by remember(entry?.id) { mutableStateOf(entry?.body ?: "") }
+    var goodThings by remember(entry?.id) { mutableStateOf(entry?.goodThings ?: "") }
+    var saved by remember(entry?.id) { mutableStateOf(false) }
 
-    // Keep fields in sync when the loaded entry arrives after composition.
     LaunchedEffect(entry?.id) {
-        gratitude = entry?.gratitude ?: ""
+        idealDay = entry?.idealDay ?: ""
         body = entry?.body ?: ""
+        goodThings = entry?.goodThings ?: ""
     }
 
     val dateFormatter = DateTimeFormatter.ofPattern("M月d日 (E)", Locale.JAPANESE)
 
     SectionCard(title = date.format(dateFormatter)) {
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "書式: ${template.name}",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Spacer(Modifier.height(8.dp))
-
         OutlinedTextField(
-            value = gratitude,
-            onValueChange = { gratitude = it; saved = false },
-            label = { Text("今日の感謝") },
+            value = idealDay,
+            onValueChange = { idealDay = it; saved = false },
+            label = { Text("今日はどんな日になれば最高？") },
             modifier = Modifier.fillMaxWidth(),
             minLines = 2,
         )
         Spacer(Modifier.height(8.dp))
-
-        val bodyHint = if (template.prompts.isNotEmpty()) {
-            template.prompts.joinToString("\n") { "・$it" }
-        } else {
-            "自由に書きましょう"
-        }
         OutlinedTextField(
             value = body,
             onValueChange = { body = it; saved = false },
-            label = { Text("本文") },
-            placeholder = { Text(bodyHint) },
+            label = { Text("やること・メモ") },
+            placeholder = { Text("・\n・\n・") },
             modifier = Modifier.fillMaxWidth(),
             minLines = 4,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = goodThings,
+            onValueChange = { goodThings = it; saved = false },
+            label = { Text("今日よかった・嬉しかったこと") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
         )
         Spacer(Modifier.height(8.dp))
         Row(
@@ -285,11 +285,9 @@ private fun JournalEditor(
                 )
             }
             Button(
-                onClick = { onSave(gratitude, body); saved = true },
-                enabled = gratitude.isNotBlank() || body.isNotBlank(),
-            ) {
-                Text("保存")
-            }
+                onClick = { onSave(idealDay, body, goodThings); saved = true },
+                enabled = idealDay.isNotBlank() || body.isNotBlank() || goodThings.isNotBlank(),
+            ) { Text("保存") }
         }
     }
 }
@@ -304,7 +302,7 @@ private fun EntryRow(entry: JournalEntry, onClick: () -> Unit) {
     ) {
         Column(Modifier.padding(16.dp)) {
             Text(entry.date.format(formatter), style = MaterialTheme.typography.labelLarge)
-            val preview = listOf(entry.gratitude, entry.body)
+            val preview = listOf(entry.idealDay, entry.body, entry.goodThings)
                 .filter { it.isNotBlank() }
                 .joinToString(" / ")
                 .ifBlank { "（内容なし）" }

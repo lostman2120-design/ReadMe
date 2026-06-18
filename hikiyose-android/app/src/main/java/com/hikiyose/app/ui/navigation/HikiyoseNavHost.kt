@@ -15,10 +15,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.hikiyose.app.ui.screens.affirmation.AffirmationScreen
+import com.hikiyose.app.ui.screens.achievement.AchievementScreen
+import com.hikiyose.app.ui.screens.entry.EntryScreen
 import com.hikiyose.app.ui.screens.home.HomeScreen
 import com.hikiyose.app.ui.screens.journal.JournalScreen
-import com.hikiyose.app.ui.screens.template.TemplateScreen
+import com.hikiyose.app.ui.screens.records.RecordsScreen
 
 @Composable
 fun HikiyoseNavHost() {
@@ -55,9 +56,10 @@ fun HikiyoseNavHost() {
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(TopDestination.Home.route) { HomeScreen() }
+            composable(TopDestination.Entry.route) { EntryScreen() }
             composable(TopDestination.Journal.route) { JournalScreen() }
-            composable(TopDestination.Affirmation.route) { AffirmationScreen() }
-            composable(TopDestination.Templates.route) { TemplateScreen() }
+            composable(TopDestination.Achievement.route) { AchievementScreen() }
+            composable(TopDestination.Records.route) { RecordsScreen() }
         }
     }
 }
