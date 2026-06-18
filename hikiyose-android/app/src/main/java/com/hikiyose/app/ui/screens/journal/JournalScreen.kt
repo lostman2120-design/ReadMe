@@ -110,6 +110,14 @@ private fun ManifestationsHeader(manifestations: List<Manifestation>) {
         } else {
             manifestations.forEach { m ->
                 Text("・${m.text}", style = MaterialTheme.typography.bodyLarge)
+                if (m.fulfilledMessage.isNotBlank()) {
+                    Text(
+                        text = m.fulfilledMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 14.dp, bottom = 4.dp),
+                    )
+                }
             }
         }
     }

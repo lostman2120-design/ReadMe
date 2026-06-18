@@ -8,16 +8,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,27 +46,23 @@ fun EntryScreen(viewModel: EntryViewModel = hikiyoseViewModel()) {
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item {
-            Text("記入", style = MaterialTheme.typography.titleLarge)
-        }
+        item { Text("記入", style = MaterialTheme.typography.titleLarge) }
 
         item {
             SectionCard(title = "必ず引き寄せること") {
                 Spacer(Modifier.height(8.dp))
                 if (state.manifestations.isEmpty()) {
-                    Hint("引き寄せたいことを書き出しましょう。")
-                }
-                state.manifestations.forEach { m ->
-                    DeletableRow(text = m.text, onDelete = { viewModel.deleteManifestation(m) })
+                    Hint("引き寄せたいことを書き出しましょう。各項目に「叶った自分からのメッセージ」を添えられます。")
                 }
                 AddRow(placeholder = "引き寄せることを追加", onAdd = viewModel::addManifestation)
             }
         }
 
-        item {
-            FulfilledMessageCard(
-                message = state.fulfilledMessage,
-                onSave = viewModel::saveFulfilledMessage,
+        items(state.manifestations, key = { it.id }) { m ->
+            ManifestationCard(
+                manifestation = m,
+                onSaveMessage = { msg -> viewModel.saveFulfilledMessage(m, msg) },
+                onDelete = { viewModel.deleteManifestation(m) },
             )
         }
 
@@ -91,6 +90,65 @@ fun EntryScreen(viewModel: EntryViewModel = hikiyoseViewModel()) {
                     )
                 }
                 AddRow(placeholder = "やることを追加", onAdd = viewModel::addTodo)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ManifestationCard(
+    manifestation: Manifestation,
+    onSaveMessage: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    var message by remember(manifestation.id, manifestation.fulfilledMessage) {
+        mutableStateOf(manifestation.fulfilledMessage)
+    }
+    var saved by remember(manifestation.id, manifestation.fulfilledMessage) {
+        mutableStateOf(false)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    manifestation.text,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Filled.Close, contentDescription = "削除")
+                }
+            }
+            OutlinedTextField(
+                value = message,
+                onValueChange = { message = it; saved = false },
+                label = { Text("叶った自分からのメッセージ") },
+                placeholder = { Text("これが叶った未来のあなたから、今の自分へ。") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (saved) {
+                    Text(
+                        "保存しました",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(end = 12.dp),
+                    )
+                }
+                TextButton(onClick = { onSaveMessage(message); saved = true }) {
+                    Text("メッセージを保存")
+                }
             }
         }
     }
@@ -147,38 +205,6 @@ private fun TodoRow(todo: TodoItem, onToggle: () -> Unit, onDelete: () -> Unit) 
         )
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.Close, contentDescription = "削除")
-        }
-    }
-}
-
-@Composable
-private fun FulfilledMessageCard(message: String, onSave: (String) -> Unit) {
-    var text by remember(message) { mutableStateOf(message) }
-    var saved by remember(message) { mutableStateOf(false) }
-    SectionCard(title = "叶った自分からのメッセージ") {
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it; saved = false },
-            placeholder = { Text("願いが叶った未来のあなたから、今の自分へ。") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 3,
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (saved) {
-                Text(
-                    "保存しました",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(end = 12.dp),
-                )
-            }
-            Button(onClick = { onSave(text); saved = true }) { Text("保存") }
         }
     }
 }

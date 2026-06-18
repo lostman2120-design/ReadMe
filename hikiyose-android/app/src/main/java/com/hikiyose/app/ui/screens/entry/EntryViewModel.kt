@@ -6,7 +6,6 @@ import com.hikiyose.app.data.entity.Affirmation
 import com.hikiyose.app.data.entity.Manifestation
 import com.hikiyose.app.data.entity.TodoItem
 import com.hikiyose.app.data.repository.HikiyoseRepository
-import com.hikiyose.app.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -17,22 +16,17 @@ data class EntryUiState(
     val manifestations: List<Manifestation> = emptyList(),
     val affirmations: List<Affirmation> = emptyList(),
     val todos: List<TodoItem> = emptyList(),
-    val fulfilledMessage: String = "",
 )
 
 /** Wireframe ② : the entry page where the user sets up their manifestation. */
-class EntryViewModel(
-    private val repo: HikiyoseRepository,
-    private val settings: SettingsRepository,
-) : ViewModel() {
+class EntryViewModel(private val repo: HikiyoseRepository) : ViewModel() {
 
     val uiState: StateFlow<EntryUiState> = combine(
         repo.activeManifestations(),
         repo.affirmations(),
         repo.todos(),
-        settings.fulfilledSelfMessage,
-    ) { manifestations, affirmations, todos, message ->
-        EntryUiState(manifestations, affirmations, todos, message)
+    ) { manifestations, affirmations, todos ->
+        EntryUiState(manifestations, affirmations, todos)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -46,19 +40,19 @@ class EntryViewModel(
         viewModelScope.launch { repo.saveManifestation(Manifestation(text = t)) }
     }
 
-    fun updateManifestation(item: Manifestation, text: String) {
+    fun updateManifestationText(item: Manifestation, text: String) {
         val t = text.trim()
         if (t.isEmpty()) return
         viewModelScope.launch { repo.updateManifestation(item.copy(text = t)) }
     }
 
-    fun deleteManifestation(item: Manifestation) {
-        viewModelScope.launch { repo.deleteManifestation(item) }
+    /** 叶った自分からのメッセージ — saved per manifestation item. */
+    fun saveFulfilledMessage(item: Manifestation, message: String) {
+        viewModelScope.launch { repo.updateManifestation(item.copy(fulfilledMessage = message)) }
     }
 
-    // 叶った自分からのメッセージ
-    fun saveFulfilledMessage(message: String) {
-        viewModelScope.launch { settings.setFulfilledSelfMessage(message) }
+    fun deleteManifestation(item: Manifestation) {
+        viewModelScope.launch { repo.deleteManifestation(item) }
     }
 
     // 毎日唱えること（アファメーション）
