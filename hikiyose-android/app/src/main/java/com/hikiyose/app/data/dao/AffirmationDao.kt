@@ -14,6 +14,9 @@ interface AffirmationDao {
     @Query("SELECT * FROM affirmations ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<Affirmation>>
 
+    @Query("SELECT * FROM affirmations")
+    suspend fun getAll(): List<Affirmation>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(affirmation: Affirmation): Long
 

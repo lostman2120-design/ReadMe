@@ -1,11 +1,15 @@
 package com.hikiyose.app.ui.screens.entry
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hikiyose.app.data.entity.Affirmation
 import com.hikiyose.app.data.entity.Manifestation
 import com.hikiyose.app.data.entity.TodoItem
 import com.hikiyose.app.data.repository.HikiyoseRepository
+import com.hikiyose.app.data.repository.ReminderSettings
+import com.hikiyose.app.data.repository.SettingsRepository
+import com.hikiyose.app.notification.ReminderScheduler
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -19,7 +23,11 @@ data class EntryUiState(
 )
 
 /** Wireframe ② : the entry page where the user sets up their manifestation. */
-class EntryViewModel(private val repo: HikiyoseRepository) : ViewModel() {
+class EntryViewModel(
+    private val repo: HikiyoseRepository,
+    private val settings: SettingsRepository,
+    private val appContext: Context,
+) : ViewModel() {
 
     val uiState: StateFlow<EntryUiState> = combine(
         repo.activeManifestations(),
@@ -32,6 +40,25 @@ class EntryViewModel(private val repo: HikiyoseRepository) : ViewModel() {
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = EntryUiState(),
     )
+
+    val reminderSettings: StateFlow<ReminderSettings> =
+        settings.reminderSettings.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = ReminderSettings(),
+        )
+
+    /** Persist the morning reminder and (re)schedule or cancel the daily alarm. */
+    fun setReminder(enabled: Boolean, hour: Int, minute: Int) {
+        viewModelScope.launch {
+            settings.setReminder(enabled, hour, minute)
+            if (enabled) {
+                ReminderScheduler.schedule(appContext, hour, minute)
+            } else {
+                ReminderScheduler.cancel(appContext)
+            }
+        }
+    }
 
     // 必ず引き寄せること
     fun addManifestation(text: String) {

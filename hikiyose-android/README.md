@@ -52,8 +52,17 @@ CLI ビルドには `local.properties` に SDK パスが必要です:
 sdk.dir=/path/to/Android/sdk
 ```
 
+## 毎朝のアファメーション通知
+
+「記入」タブの「毎朝のアファメーション通知」カードで ON/OFF と時刻を設定できます。
+
+- `notification/ReminderScheduler`: `AlarmManager.setInexactRepeating`（日次・省電力、exact-alarm 権限不要）
+- `notification/ReminderReceiver`: 発火時に登録済みアファメーションからランダムに1件選び通知
+- `notification/BootReceiver`: 端末再起動後に再スケジュール
+- Android 13+ は `POST_NOTIFICATIONS` 権限を ON 操作時にリクエスト
+
 ## 今後の拡張候補（v1 では未実装）
 
 - コミュニティ機能 — サーバー/バックエンドが必要
-- 毎朝の通知（アファメーション・引き寄せのリマインド）
+- 達成記録の振り返り通知
 - データのバックアップ/エクスポート

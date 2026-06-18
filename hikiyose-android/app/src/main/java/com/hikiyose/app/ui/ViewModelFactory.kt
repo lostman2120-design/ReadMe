@@ -24,7 +24,7 @@ class ViewModelFactory(private val app: HikiyoseApplication) : ViewModelProvider
             modelClass.isAssignableFrom(HomeViewModel::class.java) ->
                 HomeViewModel(app.settings) as T
             modelClass.isAssignableFrom(EntryViewModel::class.java) ->
-                EntryViewModel(app.repository) as T
+                EntryViewModel(app.repository, app.settings, app.applicationContext) as T
             modelClass.isAssignableFrom(JournalViewModel::class.java) ->
                 JournalViewModel(app.repository) as T
             modelClass.isAssignableFrom(AchievementViewModel::class.java) ->

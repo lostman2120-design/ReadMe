@@ -19,6 +19,7 @@ class HikiyoseRepository(private val db: AppDatabase) {
 
     // ---- Affirmations (毎日唱えること) ----
     fun affirmations(): Flow<List<Affirmation>> = db.affirmationDao().observeAll()
+    suspend fun affirmationsOnce(): List<Affirmation> = db.affirmationDao().getAll()
     suspend fun saveAffirmation(a: Affirmation) = db.affirmationDao().upsert(a)
     suspend fun updateAffirmation(a: Affirmation) = db.affirmationDao().update(a)
     suspend fun deleteAffirmation(a: Affirmation) = db.affirmationDao().delete(a)
