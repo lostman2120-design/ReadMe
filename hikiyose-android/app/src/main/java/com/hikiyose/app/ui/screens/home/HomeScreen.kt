@@ -52,7 +52,7 @@ fun HomeScreen(viewModel: HomeViewModel = hikiyoseViewModel()) {
                 .weight(1f)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
+                .padding(horizontal = 24.dp, vertical = 28.dp),
         )
     }
 }
