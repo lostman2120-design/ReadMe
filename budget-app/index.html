@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>💸 GIGA家計簿 ULTRA — 無駄に派手な家計簿</title>
+<style>
+  /* ============ tokens ============ */
+  :root {
+    --surface-1: #16142e;      /* chart surface */
+    --page: #0a0918;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c3a;
+    --border: rgba(255,255,255,0.10);
+    /* validated categorical slots (dark) */
+    --series-1: #3987e5;  /* 食費 */
+    --series-2: #199e70;  /* 住居 */
+    --series-3: #c98500;  /* 光熱費 */
+    --series-4: #008300;  /* 交通 */
+    --series-5: #9085e9;  /* 通信 */
+    --series-6: #e66767;  /* 娯楽 */
+    --series-7: #d55181;  /* 医療 */
+    --series-8: #d95926;  /* その他 */
+    --neon-pink: #ff2d95;
+    --neon-cyan: #00f0ff;
+    --neon-lime: #b6ff00;
+    --neon-gold: #ffd700;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* ============ 無駄その1: オーロラ背景 ============ */
+  .aurora {
+    position: fixed; inset: -20%;
+    z-index: 0; pointer-events: none;
+    filter: blur(90px); opacity: .55;
+  }
+  .aurora .blob {
+    position: absolute; border-radius: 50%;
+    mix-blend-mode: screen;
+    animation: drift 24s ease-in-out infinite alternate;
+  }
+  .aurora .b1 { width: 55vw; height: 55vw; left: -10%; top: -10%;
+    background: radial-gradient(circle, #6a2bd9, transparent 70%); }
+  .aurora .b2 { width: 45vw; height: 45vw; right: -5%; top: 20%;
+    background: radial-gradient(circle, #0e5ec7, transparent 70%);
+    animation-delay: -8s; animation-duration: 30s; }
+  .aurora .b3 { width: 50vw; height: 50vw; left: 25%; bottom: -15%;
+    background: radial-gradient(circle, #c7156e, transparent 70%);
+    animation-delay: -16s; animation-duration: 36s; }
+  @keyframes drift {
+    0%   { transform: translate(0,0) scale(1); }
+    50%  { transform: translate(8vw,-6vh) scale(1.15); }
+    100% { transform: translate(-6vw,7vh) scale(.9); }
+  }
+
+  /* ============ 無駄その2: 星空パーティクル & エフェクト用キャンバス ============ */
+  #starfield, #fxCanvas {
+    position: fixed; inset: 0; pointer-events: none;
+  }
+  #starfield { z-index: 1; }
+  #fxCanvas  { z-index: 100; }
+
+  /* ============ layout ============ */
+  .app {
+    position: relative; z-index: 10;
+    max-width: 1080px; margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  body.shake .app { animation: shake .45s cubic-bezier(.36,.07,.19,.97); }
+  @keyframes shake {
+    10%, 90% { transform: translate(-2px, 1px) rotate(-.3deg); }
+    20%, 80% { transform: translate(4px, -2px) rotate(.3deg); }
+    30%, 70% { transform: translate(-6px, 2px) rotate(-.5deg); }
+    40%, 60% { transform: translate(6px, -1px) rotate(.5deg); }
+    50%      { transform: translate(-4px, 3px) rotate(0); }
+  }
+
+  .flash {
+    position: fixed; inset: 0; z-index: 90; pointer-events: none;
+    opacity: 0; background: radial-gradient(circle, rgba(255,45,100,.35), transparent 70%);
+  }
+  .flash.go { animation: flashAnim .5s ease-out; }
+  .flash.income { background: radial-gradient(circle, rgba(255,215,0,.35), transparent 70%); }
+  @keyframes flashAnim { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+  /* ============ 無駄その3: レインボー発光タイトル ============ */
+  header { text-align: center; margin-bottom: 28px; }
+  h1 {
+    font-size: clamp(30px, 6vw, 56px);
+    font-weight: 900; letter-spacing: .04em;
+    background: linear-gradient(90deg,
+      #ff2d95, #ffd700, #b6ff00, #00f0ff, #9085e9, #ff2d95);
+    background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+    animation: rainbowSlide 5s linear infinite;
+    filter: drop-shadow(0 0 14px rgba(255,45,149,.55))
+            drop-shadow(0 0 30px rgba(0,240,255,.35));
+  }
+  @keyframes rainbowSlide { to { background-position: 300% 0; } }
+  .tagline {
+    color: var(--text-secondary); margin-top: 6px; font-size: 14px;
+    animation: pulseGlow 2.4s ease-in-out infinite;
+  }
+  @keyframes pulseGlow {
+    0%, 100% { opacity: .6; text-shadow: none; }
+    50% { opacity: 1; text-shadow: 0 0 12px var(--neon-cyan); }
+  }
+
+  /* ============ カード共通 (3D tilt + ネオン縁) ============ */
+  .card {
+    position: relative;
+    background: linear-gradient(160deg, rgba(255,255,255,.05), rgba(255,255,255,.015));
+    background-color: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 22px;
+    backdrop-filter: blur(8px);
+    transform-style: preserve-3d;
+    transition: transform .15s ease-out, box-shadow .3s;
+  }
+  .card::before {
+    content: ""; position: absolute; inset: -3px; z-index: -1;
+    border-radius: 21px;
+    background: conic-gradient(from var(--spin, 0deg),
+      #ff2d95, #ffd700, #b6ff00, #00f0ff, #9085e9, #ff2d95);
+    opacity: 0; transition: opacity .35s;
+    animation: spinBorder 4s linear infinite;
+    filter: blur(6px);
+    /* リング状にくり抜き: グラフの可読性は守る */
+    padding: 4px;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+  }
+  @property --spin { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  @keyframes spinBorder { to { --spin: 360deg; } }
+  .card:hover::before { opacity: .9; }
+  /* 入力フォームだけは全面レインボーで無駄に派手に */
+  .entry::before {
+    -webkit-mask: none; mask: none; padding: 0;
+    opacity: .35;
+  }
+  .entry:hover::before { opacity: .55; }
+
+  /* ============ サマリー段 ============ */
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 720px) { .summary { grid-template-columns: 1fr; } }
+  .stat .label { font-size: 13px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+  .stat .value {
+    font-size: clamp(26px, 4vw, 40px); font-weight: 800; margin-top: 6px;
+    transition: text-shadow .3s;
+  }
+  .stat.balance .value { color: var(--neon-cyan); text-shadow: 0 0 18px rgba(0,240,255,.6); }
+  .stat.income  .value { color: var(--neon-gold); text-shadow: 0 0 18px rgba(255,215,0,.5); }
+  .stat.expense .value { color: var(--neon-pink); text-shadow: 0 0 18px rgba(255,45,149,.5); }
+  .stat .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* ============ 入力フォーム ============ */
+  .entry { margin-bottom: 20px; }
+  .entry h2, .panel h2 {
+    font-size: 15px; letter-spacing: .14em; color: var(--text-secondary);
+    margin-bottom: 14px; text-transform: uppercase;
+  }
+  .form-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .form-row > * { flex: 1 1 140px; }
+
+  .type-toggle { display: flex; gap: 8px; flex: 1 1 100%; }
+  .type-btn {
+    flex: 1; padding: 12px; border-radius: 12px; cursor: pointer;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,.04); color: var(--text-secondary);
+    font-size: 15px; font-weight: 700; transition: all .25s;
+  }
+  .type-btn.active[data-type="expense"] {
+    background: linear-gradient(135deg, rgba(255,45,149,.25), rgba(255,45,149,.08));
+    border-color: var(--neon-pink); color: #fff;
+    box-shadow: 0 0 18px rgba(255,45,149,.5), inset 0 0 12px rgba(255,45,149,.2);
+  }
+  .type-btn.active[data-type="income"] {
+    background: linear-gradient(135deg, rgba(255,215,0,.25), rgba(255,215,0,.08));
+    border-color: var(--neon-gold); color: #fff;
+    box-shadow: 0 0 18px rgba(255,215,0,.5), inset 0 0 12px rgba(255,215,0,.2);
+  }
+
+  input, select {
+    padding: 12px 14px; border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(0,0,0,.35); color: var(--text-primary);
+    font-size: 15px; outline: none;
+    transition: border-color .25s, box-shadow .25s;
+  }
+  input:focus, select:focus {
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 14px rgba(0,240,255,.45);
+  }
+  select option { background: #16142e; }
+
+  .add-btn {
+    flex: 1 1 100%;
+    padding: 14px; border: none; border-radius: 12px; cursor: pointer;
+    font-size: 17px; font-weight: 900; letter-spacing: .08em; color: #fff;
+    background: linear-gradient(90deg, #ff2d95, #7b2ff7, #00f0ff, #ff2d95);
+    background-size: 300% 100%;
+    animation: rainbowSlide 3s linear infinite;
+    box-shadow: 0 0 22px rgba(123,47,247,.55);
+    transition: transform .12s;
+  }
+  .add-btn:hover { transform: scale(1.03); }
+  .add-btn:active { transform: scale(.96); }
+
+  /* ============ メイン2カラム ============ */
+  .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .main-grid { grid-template-columns: 1fr; } }
+
+  /* ---- ドーナツチャート ---- */
+  .donut-wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .donut-svg { flex: 0 0 auto; }
+  .donut-svg path.slice { transition: opacity .2s, transform .2s; transform-origin: 110px 110px; cursor: pointer; }
+  .donut-svg path.slice.dim { opacity: .3; }
+  .donut-svg path.slice.hot { transform: scale(1.045); }
+  .donut-center-num { font-size: 26px; font-weight: 800; fill: var(--text-primary); }
+  .donut-center-cap { font-size: 11px; fill: var(--muted); letter-spacing: .1em; }
+
+  .legend { flex: 1 1 180px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .legend-row {
+    display: flex; align-items: center; gap: 10px; font-size: 14px;
+    padding: 4px 8px; border-radius: 8px; cursor: pointer; transition: background .2s;
+  }
+  .legend-row:hover { background: rgba(255,255,255,.06); }
+  .legend-swatch { width: 12px; height: 12px; border-radius: 4px; flex: 0 0 auto; }
+  .legend-name { color: var(--text-secondary); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .legend-val { color: var(--text-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .legend-pct { color: var(--muted); font-size: 12px; width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ---- 曜日バー ---- */
+  .bars-svg text { font-family: inherit; }
+  .bars-svg .bar { transition: opacity .2s; cursor: pointer; }
+  .bars-svg .bar.dim { opacity: .35; }
+  .axis-label { font-size: 11px; fill: var(--muted); }
+  .bar-value { font-size: 11px; fill: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .baseline { stroke: #4a4a5e; stroke-width: 1; }
+
+  /* ---- ツールチップ ---- */
+  .tip {
+    position: fixed; z-index: 200; pointer-events: none;
+    background: rgba(10,9,24,.92); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 12px; font-size: 13px;
+    color: var(--text-primary); box-shadow: 0 6px 24px rgba(0,0,0,.5);
+    opacity: 0; transition: opacity .12s; white-space: nowrap;
+  }
+  .tip.show { opacity: 1; }
+  .tip .t-cat { color: var(--text-secondary); }
+  .tip .t-val { font-weight: 800; font-variant-numeric: tabular-nums; }
+
+  /* ============ 履歴 ============ */
+  .history { margin-top: 16px; }
+  .tx-list { list-style: none; display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; padding-right: 4px; }
+  .tx-list::-webkit-scrollbar { width: 6px; }
+  .tx-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 3px; }
+
+  .tx {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border-radius: 12px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid transparent;
+    animation: txIn .5s cubic-bezier(.2,.9,.3,1.4);
+    transition: border-color .2s, box-shadow .2s;
+  }
+  @keyframes txIn {
+    from { opacity: 0; transform: translateX(-30px) scale(.9); }
+    to   { opacity: 1; transform: none; }
+  }
+  .tx:hover { border-color: var(--border); box-shadow: 0 0 14px rgba(0,240,255,.15); }
+  .tx.dying { animation: txOut .4s ease-in forwards; }
+  @keyframes txOut {
+    to { opacity: 0; transform: translateX(60px) rotate(4deg) scale(.8); }
+  }
+  .tx-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 8px currentColor; }
+  .tx-body { flex: 1; min-width: 0; }
+  .tx-memo { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-meta { font-size: 12px; color: var(--muted); }
+  .tx-amt { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 15px; }
+  .tx-amt.plus  { color: var(--neon-gold); }
+  .tx-amt.minus { color: var(--neon-pink); }
+  .tx-del {
+    border: none; background: none; color: var(--muted); cursor: pointer;
+    font-size: 16px; padding: 4px 6px; border-radius: 8px; transition: all .2s;
+  }
+  .tx-del:hover { color: #fff; background: rgba(230,103,103,.3); transform: rotate(90deg) scale(1.2); }
+
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; font-size: 14px; }
+
+  /* ============ 無駄その4: 残高ランク ============ */
+  .rank-badge {
+    display: inline-block; margin-top: 8px; padding: 3px 12px;
+    border-radius: 999px; font-size: 12px; font-weight: 800; letter-spacing: .1em;
+    background: rgba(255,255,255,.08); border: 1px solid var(--border);
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  footer {
+    text-align: center; margin-top: 36px; font-size: 12px; color: var(--muted);
+  }
+  .sound-toggle {
+    background: none; border: 1px solid var(--border); color: var(--text-secondary);
+    border-radius: 999px; padding: 6px 16px; cursor: pointer; font-size: 13px;
+    transition: all .2s;
+  }
+  .sound-toggle:hover { border-color: var(--neon-cyan); box-shadow: 0 0 12px rgba(0,240,255,.4); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01s !important; transition-duration: .01s !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="aurora">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+</div>
+<canvas id="starfield"></canvas>
+<canvas id="fxCanvas"></canvas>
+<div class="flash" id="flash"></div>
+<div class="tip" id="tip"></div>
+
+<div class="app">
+  <header>
+    <h1>💸 GIGA家計簿 ULTRA</h1>
+    <p class="tagline">— 無駄にエフェクトが派手な家計簿 —</p>
+  </header>
+
+  <section class="summary">
+    <div class="card stat balance">
+      <div class="label">残高</div>
+      <div class="value" id="balanceVal">¥0</div>
+      <div><span class="rank-badge" id="rankBadge">RANK: —</span></div>
+    </div>
+    <div class="card stat income">
+      <div class="label">今月の収入</div>
+      <div class="value" id="incomeVal">¥0</div>
+      <div class="sub" id="incomeCount">0 件</div>
+    </div>
+    <div class="card stat expense">
+      <div class="label">今月の支出</div>
+      <div class="value" id="expenseVal">¥0</div>
+      <div class="sub" id="expenseCount">0 件</div>
+    </div>
+  </section>
+
+  <section class="card entry">
+    <h2>⚡ 取引を追加</h2>
+    <form id="entryForm">
+      <div class="form-row">
+        <div class="type-toggle">
+          <button type="button" class="type-btn active" data-type="expense">💥 支出</button>
+          <button type="button" class="type-btn" data-type="income">🌈 収入</button>
+        </div>
+        <input type="number" id="amountInput" placeholder="金額 (円)" min="1" step="1" required inputmode="numeric">
+        <select id="categorySelect" aria-label="カテゴリ"></select>
+        <input type="text" id="memoInput" placeholder="メモ (ラーメン、給料など)" maxlength="40">
+        <input type="date" id="dateInput">
+        <button type="submit" class="add-btn">🚀 ぶちこむ 🚀</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="main-grid">
+    <section class="card panel">
+      <h2>🍩 今月のカテゴリ別支出</h2>
+      <div class="donut-wrap" id="donutWrap">
+        <svg class="donut-svg" id="donutSvg" width="220" height="220" viewBox="0 0 220 220" role="img" aria-label="カテゴリ別支出ドーナツチャート"></svg>
+        <div class="legend" id="legend"></div>
+      </div>
+    </section>
+
+    <section class="card panel">
+      <h2>📅 直近7日間の支出</h2>
+      <svg class="bars-svg" id="barsSvg" width="100%" height="240" viewBox="0 0 460 240" preserveAspectRatio="xMidYMid meet" role="img" aria-label="直近7日間の支出バーチャート"></svg>
+    </section>
+  </div>
+
+  <section class="card panel history">
+    <h2>📜 取引履歴</h2>
+    <ul class="tx-list" id="txList"></ul>
+  </section>
+
+  <footer>
+    <button class="sound-toggle" id="soundToggle">🔊 効果音: ON</button>
+    <p style="margin-top:10px">データはこのブラウザの localStorage にだけ保存されます</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ================= データ ================= */
+const CATS = [
+  { id: "food",    name: "食費",   color: "var(--series-1)", hex: "#3987e5", emoji: "🍜" },
+  { id: "home",    name: "住居",   color: "var(--series-2)", hex: "#199e70", emoji: "🏠" },
+  { id: "util",    name: "光熱費", color: "var(--series-3)", hex: "#c98500", emoji: "💡" },
+  { id: "trans",   name: "交通",   color: "var(--series-4)", hex: "#008300", emoji: "🚃" },
+  { id: "net",     name: "通信",   color: "var(--series-5)", hex: "#9085e9", emoji: "📱" },
+  { id: "fun",     name: "娯楽",   color: "var(--series-6)", hex: "#e66767", emoji: "🎮" },
+  { id: "med",     name: "医療",   color: "var(--series-7)", hex: "#d55181", emoji: "💊" },
+  { id: "other",   name: "その他", color: "var(--series-8)", hex: "#d95926", emoji: "📦" },
+];
+const catById = id => CATS.find(c => c.id === id) || CATS[CATS.length - 1];
+
+const STORE_KEY = "giga-kakeibo-ultra";
+let txs = [];
+try { txs = JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch (e) { txs = []; }
+const save = () => localStorage.setItem(STORE_KEY, JSON.stringify(txs));
+
+const yen = n => "¥" + Math.round(n).toLocaleString("ja-JP");
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const sameMonth = (iso, ref) => iso.slice(0, 7) === ref.slice(0, 7);
+
+/* ================= サウンド (WebAudio 合成) ================= */
+let soundOn = true;
+let actx = null;
+function beep(freq, dur, type = "sine", gain = 0.12, when = 0) {
+  if (!soundOn) return;
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+  const t = actx.currentTime + when;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(actx.destination);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+const sfxIncome  = () => { [523, 659, 784, 1047].forEach((f, i) => beep(f, .35, "triangle", .14, i * .09)); };
+const sfxExpense = () => { [330, 262, 196].forEach((f, i) => beep(f, .3, "sawtooth", .08, i * .1)); };
+const sfxDelete  = () => beep(180, .2, "square", .06);
+const sfxHuge    = () => { [110, 98, 82, 65].forEach((f, i) => beep(f, .5, "sawtooth", .12, i * .12)); };
+
+document.getElementById("soundToggle").addEventListener("click", e => {
+  soundOn = !soundOn;
+  e.currentTarget.textContent = soundOn ? "🔊 効果音: ON" : "🔇 効果音: OFF";
+  if (soundOn) beep(880, .15, "triangle");
+});
+
+/* ================= 無駄その2: 星空 ================= */
+const starC = document.getElementById("starfield");
+const starCtx = starC.getContext("2d");
+let stars = [];
+function initStars() {
+  starC.width = innerWidth; starC.height = innerHeight;
+  stars = Array.from({ length: 130 }, () => ({
+    x: Math.random() * starC.width, y: Math.random() * starC.height,
+    r: Math.random() * 1.6 + .3, tw: Math.random() * Math.PI * 2,
+    sp: Math.random() * .25 + .05,
+  }));
+}
+addEventListener("resize", initStars);
+initStars();
+(function starLoop() {
+  starCtx.clearRect(0, 0, starC.width, starC.height);
+  for (const s of stars) {
+    s.tw += .03; s.y += s.sp;
+    if (s.y > starC.height) { s.y = -2; s.x = Math.random() * starC.width; }
+    const a = .35 + Math.sin(s.tw) * .3;
+    starCtx.beginPath();
+    starCtx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    starCtx.fillStyle = `rgba(200,220,255,${a})`;
+    starCtx.fill();
+  }
+  requestAnimationFrame(starLoop);
+})();
+
+/* ================= FXレイヤー: 紙吹雪 / コイン / 飛ぶ絵文字 / カーソル軌跡 ================= */
+const fxC = document.getElementById("fxCanvas");
+const fx = fxC.getContext("2d");
+function sizeFx() { fxC.width = innerWidth; fxC.height = innerHeight; }
+addEventListener("resize", sizeFx); sizeFx();
+
+let parts = [];
+const G = 0.18;
+function confetti(x, y, n = 120) {
+  const colors = ["#ff2d95", "#ffd700", "#b6ff00", "#00f0ff", "#9085e9", "#ffffff"];
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, v = Math.random() * 7 + 3;
+    parts.push({
+      kind: "conf", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 4,
+      w: Math.random() * 8 + 4, h: Math.random() * 5 + 3,
+      rot: Math.random() * Math.PI, vr: (Math.random() - .5) * .4,
+      color: colors[(Math.random() * colors.length) | 0], life: 1, decay: .008 + Math.random() * .008,
+    });
+  }
+}
+function coinRain(n = 40) {
+  for (let i = 0; i < n; i++) {
+    parts.push({
+      kind: "emoji", ch: "🪙", x: Math.random() * fxC.width, y: -30 - Math.random() * 300,
+      vx: (Math.random() - .5) * 1.5, vy: Math.random() * 2 + 2,
+      size: Math.random() * 22 + 16, rot: 0, vr: (Math.random() - .5) * .2,
+      life: 1, decay: .004,
+    });
+  }
+}
+function emojiBurst(x, y, ch, n = 14) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, v = Math.random() * 6 + 2;
+    parts.push({
+      kind: "emoji", ch, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 3,
+      size: Math.random() * 20 + 14, rot: 0, vr: (Math.random() - .5) * .3,
+      life: 1, decay: .012,
+    });
+  }
+}
+addEventListener("pointermove", e => {
+  if (Math.random() < .5) parts.push({
+    kind: "spark", x: e.clientX, y: e.clientY,
+    vx: (Math.random() - .5) * 1.2, vy: (Math.random() - .5) * 1.2 - .4,
+    size: Math.random() * 2.5 + 1, life: 1, decay: .04,
+    color: `hsl(${(performance.now() / 8) % 360},100%,70%)`,
+  });
+});
+(function fxLoop() {
+  fx.clearRect(0, 0, fxC.width, fxC.height);
+  parts = parts.filter(p => p.life > 0 && p.y < fxC.height + 60);
+  for (const p of parts) {
+    p.x += p.vx; p.y += p.vy;
+    if (p.kind !== "spark") p.vy += G;
+    p.life -= p.decay;
+    if (p.rot !== undefined) p.rot += p.vr;
+    fx.save();
+    fx.globalAlpha = Math.max(0, Math.min(1, p.life));
+    if (p.kind === "conf") {
+      fx.translate(p.x, p.y); fx.rotate(p.rot);
+      fx.fillStyle = p.color;
+      fx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+    } else if (p.kind === "emoji") {
+      fx.translate(p.x, p.y); fx.rotate(p.rot);
+      fx.font = `${p.size}px serif`;
+      fx.textAlign = "center"; fx.textBaseline = "middle";
+      fx.fillText(p.ch, 0, 0);
+    } else {
+      fx.beginPath(); fx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      fx.fillStyle = p.color;
+      fx.shadowColor = p.color; fx.shadowBlur = 8;
+      fx.fill();
+    }
+    fx.restore();
+  }
+  requestAnimationFrame(fxLoop);
+})();
+
+/* ================= 3D tilt ================= */
+document.querySelectorAll(".card").forEach(card => {
+  card.addEventListener("pointermove", e => {
+    const r = card.getBoundingClientRect();
+    const dx = (e.clientX - r.left) / r.width - .5;
+    const dy = (e.clientY - r.top) / r.height - .5;
+    card.style.transform = `perspective(900px) rotateY(${dx * 6}deg) rotateX(${dy * -6}deg)`;
+  });
+  card.addEventListener("pointerleave", () => { card.style.transform = ""; });
+});
+
+/* ================= カウントアップ ================= */
+const shown = {};
+function countTo(el, target) {
+  const key = el.id;
+  const from = shown[key] ?? 0;
+  if (from === target) { el.textContent = yen(target); return; }
+  shown[key] = target;
+  const t0 = performance.now(), dur = 700;
+  (function tick(t) {
+    const p = Math.min(1, (t - t0) / dur);
+    const ease = 1 - Math.pow(1 - p, 3);
+    el.textContent = yen(from + (target - from) * ease);
+    if (p < 1) requestAnimationFrame(tick);
+  })(t0);
+}
+
+/* ================= フォーム ================= */
+let entryType = "expense";
+const typeBtns = document.querySelectorAll(".type-btn");
+typeBtns.forEach(b => b.addEventListener("click", () => {
+  entryType = b.dataset.type;
+  typeBtns.forEach(x => x.classList.toggle("active", x === b));
+  beep(entryType === "income" ? 660 : 440, .1, "triangle", .06);
+}));
+
+const catSel = document.getElementById("categorySelect");
+catSel.innerHTML = CATS.map(c => `<option value="${c.id}">${c.emoji} ${c.name}</option>`).join("");
+document.getElementById("dateInput").value = todayStr();
+
+document.getElementById("entryForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const amount = Number(document.getElementById("amountInput").value);
+  if (!amount || amount <= 0) return;
+  const tx = {
+    id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+    type: entryType,
+    amount,
+    cat: catSel.value,
+    memo: document.getElementById("memoInput").value.trim(),
+    date: document.getElementById("dateInput").value || todayStr(),
+  };
+  txs.unshift(tx);
+  save();
+  render();
+
+  /* ここからが本番(無駄なエフェクト) */
+  const btn = e.target.querySelector(".add-btn");
+  const r = btn.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const flash = document.getElementById("flash");
+  flash.classList.remove("go", "income");
+  void flash.offsetWidth;
+  if (tx.type === "income") {
+    flash.classList.add("income");
+    confetti(cx, cy, 160);
+    coinRain(50);
+    sfxIncome();
+  } else {
+    confetti(cx, cy, 80);
+    emojiBurst(cx, cy, "💸", 16);
+    sfxExpense();
+    if (amount >= 10000) {
+      document.body.classList.remove("shake");
+      void document.body.offsetWidth;
+      document.body.classList.add("shake");
+      emojiBurst(cx, cy, "🔥", 20);
+      sfxHuge();
+    }
+  }
+  flash.classList.add("go");
+
+  document.getElementById("amountInput").value = "";
+  document.getElementById("memoInput").value = "";
+  document.getElementById("amountInput").focus();
+});
+
+/* ================= ツールチップ ================= */
+const tip = document.getElementById("tip");
+function showTip(html, x, y) {
+  tip.innerHTML = html;
+  tip.classList.add("show");
+  const pad = 14;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(x + pad, innerWidth - w - 8) + "px";
+  tip.style.top = Math.max(8, y - h - pad) + "px";
+}
+const hideTip = () => tip.classList.remove("show");
+
+/* ================= ドーナツ ================= */
+function arcPath(cx, cy, r0, r1, a0, a1) {
+  const p = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const large = a1 - a0 > Math.PI ? 1 : 0;
+  const [x0, y0] = p(r1, a0), [x1, y1] = p(r1, a1);
+  const [x2, y2] = p(r0, a1), [x3, y3] = p(r0, a0);
+  return `M${x0},${y0} A${r1},${r1} 0 ${large} 1 ${x1},${y1} L${x2},${y2} A${r0},${r0} 0 ${large} 0 ${x3},${y3} Z`;
+}
+
+function renderDonut(byCat, total) {
+  const svg = document.getElementById("donutSvg");
+  const legend = document.getElementById("legend");
+  svg.innerHTML = ""; legend.innerHTML = "";
+  const NS = "http://www.w3.org/2000/svg";
+
+  const entries = CATS.map(c => ({ cat: c, val: byCat[c.id] || 0 })).filter(e => e.val > 0);
+
+  if (!entries.length) {
+    const t = document.createElementNS(NS, "text");
+    t.setAttribute("x", 110); t.setAttribute("y", 114);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "donut-center-cap");
+    t.textContent = "今月の支出はまだなし 🎉";
+    svg.appendChild(t);
+    legend.innerHTML = `<div class="empty">支出を追加するとここが光ります ✨</div>`;
+    return;
+  }
+
+  const cx = 110, cy = 110, r0 = 62, r1 = 100;
+  const GAP = 0.035; /* 2px相当のサーフェスギャップ(ラジアン) */
+  let a = -Math.PI / 2;
+
+  entries.forEach((e, i) => {
+    const frac = e.val / total;
+    const sweep = frac * Math.PI * 2;
+    const a0 = a + (entries.length > 1 ? GAP / 2 : 0);
+    const a1 = a + sweep - (entries.length > 1 ? GAP / 2 : 0);
+    a += sweep;
+    if (a1 <= a0) return;
+
+    const path = document.createElementNS(NS, "path");
+    path.setAttribute("d", arcPath(cx, cy, r0, r1, a0, a1));
+    path.setAttribute("fill", e.cat.hex);
+    path.setAttribute("class", "slice");
+    path.dataset.idx = i;
+    svg.appendChild(path);
+
+    const mid = (a0 + a1) / 2;
+    const pct = Math.round(frac * 100);
+    if (pct >= 8) {
+      const lr = (r0 + r1) / 2;
+      const t = document.createElementNS(NS, "text");
+      t.setAttribute("x", cx + lr * Math.cos(mid));
+      t.setAttribute("y", cy + lr * Math.sin(mid) + 4);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("fill", "#ffffff");
+      t.setAttribute("font-size", "12");
+      t.setAttribute("font-weight", "700");
+      t.setAttribute("pointer-events", "none");
+      t.textContent = pct + "%";
+      svg.appendChild(t);
+    }
+
+    const hover = on => {
+      svg.querySelectorAll(".slice").forEach(s => {
+        s.classList.toggle("dim", on && s !== path);
+        if (s === path) s.classList.toggle("hot", on);
+      });
+      legend.querySelectorAll(".legend-row").forEach((row, j) => {
+        row.style.background = on && j === i ? "rgba(255,255,255,.08)" : "";
+      });
+    };
+    path.addEventListener("pointermove", ev => {
+      hover(true);
+      showTip(`<span class="t-cat">${e.cat.emoji} ${e.cat.name}</span><br><span class="t-val">${yen(e.val)}</span> <span class="t-cat">(${Math.round(frac * 100)}%)</span>`, ev.clientX, ev.clientY);
+    });
+    path.addEventListener("pointerleave", () => { hover(false); hideTip(); });
+
+    const row = document.createElement("div");
+    row.className = "legend-row";
+    row.innerHTML = `<span class="legend-swatch" style="background:${e.cat.hex}"></span>
+      <span class="legend-name">${e.cat.emoji} ${e.cat.name}</span>
+      <span class="legend-val">${yen(e.val)}</span>
+      <span class="legend-pct">${Math.round(frac * 100)}%</span>`;
+    row.addEventListener("pointerenter", () => hover(true));
+    row.addEventListener("pointerleave", () => hover(false));
+    legend.appendChild(row);
+  });
+
+  const tNum = document.createElementNS(NS, "text");
+  tNum.setAttribute("x", cx); tNum.setAttribute("y", cy + 2);
+  tNum.setAttribute("text-anchor", "middle");
+  tNum.setAttribute("class", "donut-center-num");
+  tNum.textContent = yen(total);
+  svg.appendChild(tNum);
+  const tCap = document.createElementNS(NS, "text");
+  tCap.setAttribute("x", cx); tCap.setAttribute("y", cy + 22);
+  tCap.setAttribute("text-anchor", "middle");
+  tCap.setAttribute("class", "donut-center-cap");
+  tCap.textContent = "今月の支出合計";
+  svg.appendChild(tCap);
+}
+
+/* ================= 7日バー ================= */
+function renderBars() {
+  const svg = document.getElementById("barsSvg");
+  svg.innerHTML = "";
+  const NS = "http://www.w3.org/2000/svg";
+  const DOW = ["日", "月", "火", "水", "木", "金", "土"];
+
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const iso = d.toISOString().slice(0, 10);
+    days.push({
+      iso,
+      label: `${d.getMonth() + 1}/${d.getDate()}(${DOW[d.getDay()]})`,
+      val: txs.filter(t => t.type === "expense" && t.date === iso)
+              .reduce((s, t) => s + t.amount, 0),
+    });
+  }
+
+  const W = 460, H = 240, padL = 10, padR = 10, padT = 26, padB = 26;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const max = Math.max(...days.map(d => d.val), 1);
+  const bw = Math.min(38, plotW / days.length - 10);
+
+  for (let g = 1; g <= 3; g++) {
+    const y = padT + plotH - (plotH * g / 3);
+    const line = document.createElementNS(NS, "line");
+    line.setAttribute("x1", padL); line.setAttribute("x2", W - padR);
+    line.setAttribute("y1", y); line.setAttribute("y2", y);
+    line.setAttribute("class", "gridline");
+    svg.appendChild(line);
+  }
+
+  days.forEach((d, i) => {
+    const cx = padL + plotW / days.length * (i + .5);
+    const h = Math.round(plotH * d.val / max);
+    const y = padT + plotH - h;
+
+    if (d.val > 0) {
+      const rect = document.createElementNS(NS, "path");
+      const x0 = cx - bw / 2, x1 = cx + bw / 2, rr = Math.min(4, h);
+      rect.setAttribute("d",
+        `M${x0},${padT + plotH} L${x0},${y + rr} Q${x0},${y} ${x0 + rr},${y} L${x1 - rr},${y} Q${x1},${y} ${x1},${y + rr} L${x1},${padT + plotH} Z`);
+      rect.setAttribute("fill", "#3987e5");
+      rect.setAttribute("class", "bar");
+      svg.appendChild(rect);
+
+      const hover = on => svg.querySelectorAll(".bar").forEach(b => b.classList.toggle("dim", on && b !== rect));
+      rect.addEventListener("pointermove", ev => {
+        hover(true);
+        showTip(`<span class="t-cat">${d.label}</span><br><span class="t-val">${yen(d.val)}</span>`, ev.clientX, ev.clientY);
+      });
+      rect.addEventListener("pointerleave", () => { hover(false); hideTip(); });
+
+      if (d.val === max) {
+        const tv = document.createElementNS(NS, "text");
+        tv.setAttribute("x", cx); tv.setAttribute("y", y - 6);
+        tv.setAttribute("text-anchor", "middle");
+        tv.setAttribute("class", "bar-value");
+        tv.textContent = yen(d.val);
+        svg.appendChild(tv);
+      }
+    }
+
+    const tl = document.createElementNS(NS, "text");
+    tl.setAttribute("x", cx); tl.setAttribute("y", H - 8);
+    tl.setAttribute("text-anchor", "middle");
+    tl.setAttribute("class", "axis-label");
+    tl.textContent = d.label;
+    svg.appendChild(tl);
+  });
+
+  const base = document.createElementNS(NS, "line");
+  base.setAttribute("x1", padL); base.setAttribute("x2", W - padR);
+  base.setAttribute("y1", padT + plotH); base.setAttribute("y2", padT + plotH);
+  base.setAttribute("class", "baseline");
+  svg.appendChild(base);
+}
+
+/* ================= 履歴 ================= */
+function renderList() {
+  const ul = document.getElementById("txList");
+  ul.innerHTML = "";
+  if (!txs.length) {
+    ul.innerHTML = `<div class="empty">まだ何もない。静かすぎる…🌑<br>上のフォームから何か追加して花火を打ち上げよう 🎆</div>`;
+    return;
+  }
+  const fmt = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
+  txs.slice(0, 60).forEach(tx => {
+    const c = catById(tx.cat);
+    const li = document.createElement("li");
+    li.className = "tx";
+    const isIn = tx.type === "income";
+    li.innerHTML = `
+      <span class="tx-dot" style="background:${isIn ? "#ffd700" : c.hex}; color:${isIn ? "#ffd700" : c.hex}"></span>
+      <div class="tx-body">
+        <div class="tx-memo">${isIn ? "🌈 " : c.emoji + " "}${escapeHtml(tx.memo) || (isIn ? "収入" : c.name)}</div>
+        <div class="tx-meta">${fmt.format(new Date(tx.date + "T00:00:00"))} ・ ${isIn ? "収入" : c.name}</div>
+      </div>
+      <span class="tx-amt ${isIn ? "plus" : "minus"}">${isIn ? "+" : "−"}${yen(tx.amount)}</span>
+      <button class="tx-del" title="削除" aria-label="削除">✕</button>`;
+    li.querySelector(".tx-del").addEventListener("click", () => {
+      li.classList.add("dying");
+      sfxDelete();
+      const r = li.getBoundingClientRect();
+      emojiBurst(r.right - 20, r.top + r.height / 2, "💨", 6);
+      setTimeout(() => {
+        txs = txs.filter(t => t.id !== tx.id);
+        save(); render();
+      }, 380);
+    });
+    ul.appendChild(li);
+  });
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, m =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+}
+
+/* ================= ランク ================= */
+function rankOf(balance) {
+  if (balance >= 1000000) return ["🌌 宇宙富豪", "#ffd700"];
+  if (balance >= 300000)  return ["👑 セレブ", "#ffd700"];
+  if (balance >= 100000)  return ["💎 貴族", "#00f0ff"];
+  if (balance >= 30000)   return ["🥈 庶民の星", "#c3c2b7"];
+  if (balance >= 1)       return ["🍞 パンの耳", "#d95926"];
+  if (balance === 0)      return ["🫥 無", "#898781"];
+  return ["🕳️ 借金の底", "#e66767"];
+}
+
+/* ================= render ================= */
+function render() {
+  const today = todayStr();
+  const monthTx = txs.filter(t => sameMonth(t.date, today));
+  const inc = monthTx.filter(t => t.type === "income");
+  const exp = monthTx.filter(t => t.type === "expense");
+  const incSum = inc.reduce((s, t) => s + t.amount, 0);
+  const expSum = exp.reduce((s, t) => s + t.amount, 0);
+  const balance = txs.reduce((s, t) => s + (t.type === "income" ? t.amount : -t.amount), 0);
+
+  countTo(document.getElementById("balanceVal"), balance);
+  countTo(document.getElementById("incomeVal"), incSum);
+  countTo(document.getElementById("expenseVal"), expSum);
+  document.getElementById("incomeCount").textContent = inc.length + " 件";
+  document.getElementById("expenseCount").textContent = exp.length + " 件";
+
+  const [rank, color] = rankOf(balance);
+  const badge = document.getElementById("rankBadge");
+  badge.textContent = "RANK: " + rank;
+  badge.style.color = color;
+  badge.style.borderColor = color;
+
+  const byCat = {};
+  exp.forEach(t => { byCat[t.cat] = (byCat[t.cat] || 0) + t.amount; });
+  renderDonut(byCat, expSum);
+  renderBars();
+  renderList();
+}
+
+render();
+
+/* 初回起動のご挨拶花火 */
+setTimeout(() => confetti(innerWidth / 2, innerHeight * .3, 90), 400);
+</script>
+</body>
+</html>
